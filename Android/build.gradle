@@ -1,0 +1,4 @@
+// Top-level build file for StArray.ModLoader Android AAR library
+plugins {
+    id 'com.android.library' version '8.10.0' apply false
+}
