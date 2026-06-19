@@ -18,6 +18,10 @@ extern "C" {
 
 // ---- Init / Lifecycle ----
 
+void GetAssemblyCount(){
+    UnityResolve::Init(dlopen("libil2cpp.so",1),UnityResolve::Mode::Il2Cpp);
+    LOGE("assembly count:%zu",UnityResolve::assembly.size());
+}
 /**
  * 初始化 UnityResolve 并遍历所有程序集。
  * @param hmodule  Mono 模块句柄 (通常为 dlopen("libmonosgen-2.0.so") 的返回值)
@@ -28,6 +32,26 @@ int modloader_resolve_init(void *hmodule, int mode) {
     LOGI("UnityResolve::Init hmodule=%p mode=%d", hmodule, mode);
     g_resolve_is_il2cpp = (mode != 0);
     UnityResolve::Init(hmodule, static_cast<UnityResolve::Mode>(mode));
+    return 0;
+}
+
+/**
+ * 初始化 UnityResolve（Il2Cpp 模式，自动获取句柄）。
+ * 内部使用 dlopen+RTLD_NOLOAD 获取已加载的 libil2cpp.so 句柄，
+ * 避免 C# 侧传递的句柄导致新加载副本。
+ * @return 0 成功
+ */
+int modloader_resolve_init_il2cpp(void) {
+    void *hmodule = dlopen("libil2cpp.so", RTLD_LAZY | RTLD_NOLOAD);
+    LOGE("modloader_resolve_init_il2cpp: dlopen handle=%p", hmodule);
+    if (!hmodule) {
+        // 回退：RTLD_NOLOAD 可能在一些旧版 Android 上不支持
+        hmodule = dlopen("libil2cpp.so", RTLD_LAZY);
+        LOGE("modloader_resolve_init_il2cpp: fallback handle=%p", hmodule);
+    }
+    if (!hmodule) return -1;
+    g_resolve_is_il2cpp = true;
+    UnityResolve::Init(hmodule, UnityResolve::Mode::Il2Cpp);
     return 0;
 }
 

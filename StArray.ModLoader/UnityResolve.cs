@@ -319,6 +319,19 @@ public class UnityResolve
     [DllImport(Lib, EntryPoint = "modloader_resolve_init")]
     private static extern int _NativeInit(nint hmodule, int mode);
 
+    [DllImport(Lib, EntryPoint = "modloader_resolve_init_il2cpp")]
+    private static extern int _NativeInitIl2Cpp();
+
+    /// <summary>
+    /// 初始化 UnityResolve（Il2Cpp 模式，自动获取 libil2cpp.so 句柄）。
+    /// 内部使用 dlopen+RTLD_NOLOAD，不会重新加载库。
+    /// </summary>
+    public void InitIl2Cpp()
+    {
+        _NativeInitIl2Cpp();
+        _initialized = true;
+    }
+
     [DllImport(Lib, EntryPoint = "modloader_resolve_thread_attach")]
     private static extern void _NativeThreadAttach();
 

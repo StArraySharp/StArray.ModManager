@@ -10,7 +10,6 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- CoreCLR embedded runtime config generation -->
     <PublishTrimmed>false</PublishTrimmed>
-    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
 
   <ItemGroup>

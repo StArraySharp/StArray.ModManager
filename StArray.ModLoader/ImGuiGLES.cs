@@ -145,6 +145,7 @@ void main() {
     static uint _fontTexture;
 
     static bool _initialized = false;
+    static bool _firstFrame = true;
 
     // ========================================================================
     // Init / Shutdown
@@ -185,6 +186,13 @@ void main() {
     // ========================================================================
     public static void RenderDrawData(ImDrawDataPtr drawData)
     {
+        // Diagnostic: first frame, draw a red rect to confirm GL works
+        if (_firstFrame)
+        {
+            _firstFrame = false;
+            Mono.Log($"[ImGuiGLES] RenderDrawData: CmdLists={drawData.CmdListsCount} TotalVtx={drawData.TotalVtxCount} TotalIdx={drawData.TotalIdxCount} DisplaySize={drawData.DisplaySize}");
+        }
+
         if (drawData.CmdListsCount == 0) return;
 
         var io = ImGui.GetIO();

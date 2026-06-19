@@ -55,11 +55,17 @@ set_target_properties(clrjit PROPERTIES
     IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/libs/coreclr/libclrjit.so
 )
 
+# ---- cimgui: build from source as shared library ----
+set(IMGUI_STATIC OFF CACHE BOOL "" FORCE)
+set(IMGUI_FREETYPE OFF CACHE BOOL "" FORCE)
+add_subdirectory(libs/cimgui ${CMAKE_CURRENT_BINARY_DIR}/cimgui)
+
 # ---- Include directories (modloader) ----
 target_include_directories(modloader
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/cimgui
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/dobby/include
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/unityresolve
 )
@@ -78,6 +84,15 @@ find_library(log-lib log)
 target_link_libraries(modloader
     ${log-lib}
     dobby
+    cimgui
+)
+
+# ---- Post-build: copy libcimgui.so alongside libmodloader.so ----
+add_custom_command(TARGET modloader POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:cimgui>"
+        "$<TARGET_FILE_DIR:modloader>/libcimgui.so"
+    COMMENT "Copying libcimgui.so to modloader output"
 )
 
 # ---- Link libraries (monodroid) ----

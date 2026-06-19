@@ -99,6 +99,34 @@ bundle_executable_path (const char* executable, const char* bundle_path, const c
 }
 
 static bool
+try_map_assembly(const char* dir, const char* name, void** data, int64_t* size)
+{
+    char full_path[1024];
+    size_t path_len = strlen(dir) + strlen(name) + 1;
+    size_t res = snprintf(full_path, path_len + 1, "%s/%s", dir, name);
+    if (res < 0 || res != path_len) return false;
+
+    int fd = open(full_path, O_RDONLY);
+    if (fd == -1) return false;
+
+    struct stat buf;
+    if (fstat(fd, &buf) == -1) { close(fd); return false; }
+
+    int64_t size_local = buf.st_size;
+    void* mapped = mmap(NULL, size_local, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (mapped == MAP_FAILED) { close(fd); return false; }
+
+    g_mapped_files[g_mapped_files_count] = mapped;
+    g_mapped_file_sizes[g_mapped_files_count] = size_local;
+    g_mapped_files_count++;
+    close(fd);
+    *data = mapped;
+    *size = size_local;
+    LOG_INFO("Mapped %s -> %s", name, full_path);
+    return true;
+}
+
+static bool
 external_assembly_probe(const char* relative_assembly_path, void** data, int64_t* size)
 {
     if (g_mapped_files_count >= MAX_MAPPED_COUNT)
@@ -107,40 +135,27 @@ external_assembly_probe(const char* relative_assembly_path, void** data, int64_t
         return false;
     }
 
-    // Look in the bundle path where the files were extracted
-    char full_path[1024];
-    size_t path_len = strlen(g_bundle_path) + strlen(relative_assembly_path) + 1; // +1 for '/'
-    size_t res = snprintf(full_path, path_len + 1, "%s/%s", g_bundle_path, relative_assembly_path);
-    if (res < 0 || res != path_len)
-        return false;
+    // 1) Try g_bundle_path (dotnet root)
+    if (try_map_assembly(g_bundle_path, relative_assembly_path, data, size))
+        return true;
 
-    int fd = open(full_path, O_RDONLY);
-    if (fd == -1)
-        return false;
-
-    struct stat buf;
-    if (fstat(fd, &buf) == -1)
-    {
-        close(fd);
-        return false;
+    // 2) Try each APP_PATHS directory
+    const char* app_paths = getenv("APP_PATHS");
+    if (app_paths) {
+        char* paths = strdup(app_paths);
+        char* tok = strtok(paths, ":");
+        while (tok) {
+            if (strcmp(tok, g_bundle_path) != 0 && // skip g_bundle_path (already tried)
+                try_map_assembly(tok, relative_assembly_path, data, size)) {
+                free(paths);
+                return true;
+            }
+            tok = strtok(NULL, ":");
+        }
+        free(paths);
     }
 
-    int64_t size_local = buf.st_size;
-    void* mapped = mmap(NULL, size_local, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (mapped == MAP_FAILED)
-    {
-        close(fd);
-        return false;
-    }
-
-    LOG_INFO("Mapped %s -> %s", relative_assembly_path, full_path);
-    g_mapped_files[g_mapped_files_count] = mapped;
-    g_mapped_file_sizes[g_mapped_files_count] = size_local;
-    g_mapped_files_count++;
-    close(fd);
-    *data = mapped;
-    *size = size_local;
-    return true;
+    return false;
 }
 
 static void
