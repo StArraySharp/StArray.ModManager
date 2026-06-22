@@ -27,4 +27,32 @@ public class ModLoader {
     }
 
     public void stop() { MonoRunner.stop(); }
+
+    public static void launch() {
+        final String runtimeRoot = "/sdcard/ModLoader/runtime";
+        final String[] assemblyDirs = {
+            runtimeRoot,
+            "/sdcard/ModLoader/plugins",
+        };
+        final String[] nativeDirs = {
+            runtimeRoot,
+        };
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    var loader = new ModLoader()
+                            .dotnetRoot(runtimeRoot);
+                    for (String dir : assemblyDirs)
+                        loader.addAssemblyDir(dir);
+                    for (String dir : nativeDirs)
+                        loader.addNativeDir(dir);
+                    loader.start("ModLoader.dll", "StArray.ModLoader.Mono", "Entry");
+                } catch (Exception e) {
+                    Log.e(TAG, "launch failed", e);
+                }
+            }
+        }, "ModLoader-Main").start();
+    }
 }
