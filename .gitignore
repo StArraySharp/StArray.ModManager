@@ -43,6 +43,7 @@ project.lock.json
 
 # Unity test project (exclude entire dir)
 TestAndroidProject/
+TestAndroidProject2/
 
 # Runtime data (mods, etc — user-managed)
 Runtime/

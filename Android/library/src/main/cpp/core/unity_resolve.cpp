@@ -69,6 +69,16 @@ void modloader_resolve_thread_detach(void) {
     UnityResolve::ThreadDetach();
 }
 
+/**
+ * 导出所有程序集的反射信息到文件。
+ * 生成 path/dump.cs 和 path/struct.hpp 两个文件。
+ * @param path  输出目录路径
+ */
+void modloader_resolve_dump_to_file(const char *path) {
+    LOGI("DumpToFile: %s", path);
+    UnityResolve::DumpToFile(path);
+}
+
 // ---- Assembly ----
 
 /**
@@ -88,6 +98,24 @@ void *modloader_resolve_get_assembly(const char *name) {
 const char *modloader_resolve_assembly_get_name(void *assembly) {
     if (!assembly) return "";
     return static_cast<UnityResolve::Assembly*>(assembly)->name.c_str();
+}
+
+/**
+ * 按索引获取程序集中的类。
+ */
+void *modloader_resolve_assembly_get_class_at(void *assembly, int index) {
+    if (!assembly) return nullptr;
+    auto &classes = static_cast<UnityResolve::Assembly*>(assembly)->classes;
+    if (index < 0 || index >= (int)classes.size()) return nullptr;
+    return (void*)classes[index];
+}
+
+/**
+ * 获取程序集中的类数量。
+ */
+int modloader_resolve_assembly_get_class_count(void *assembly) {
+    if (!assembly) return 0;
+    return (int)static_cast<UnityResolve::Assembly*>(assembly)->classes.size();
 }
 
 /**
@@ -137,24 +165,93 @@ const char *modloader_resolve_class_get_namespace(void *klass) {
     return static_cast<UnityResolve::Class*>(klass)->namespaze.c_str();
 }
 
+/**
+ * 按索引获取类中的方法。
+ */
+void *modloader_resolve_class_get_method_at(void *klass, int index) {
+    if (!klass) return nullptr;
+    auto &methods = static_cast<UnityResolve::Class*>(klass)->methods;
+    if (index < 0 || index >= (int)methods.size()) return nullptr;
+    return (void*)methods[index];
+}
+
+/**
+ * 获取类中的方法数量。
+ */
+int modloader_resolve_class_get_method_count(void *klass) {
+    if (!klass) return 0;
+    return (int)static_cast<UnityResolve::Class*>(klass)->methods.size();
+}
+
+/**
+ * 按索引获取类中的字段。
+ */
+void *modloader_resolve_class_get_field_at(void *klass, int index) {
+    if (!klass) return nullptr;
+    auto &fields = static_cast<UnityResolve::Class*>(klass)->fields;
+    if (index < 0 || index >= (int)fields.size()) return nullptr;
+    return (void*)fields[index];
+}
+
+/**
+ * 获取类中的字段数量。
+ */
+int modloader_resolve_class_get_field_count(void *klass) {
+    if (!klass) return 0;
+    return (int)static_cast<UnityResolve::Class*>(klass)->fields.size();
+}
+
 // ---- Method ----
 
 /**
- * 按名称和方法参数数量查找方法。
- * @param klass       Class 指针
- * @param name         方法名
- * @param param_count  参数数量 (-1 表示不匹配)
- * @return Method 指针 (不透明句柄)
+ * 按名称和参数个数查找方法。
  */
-void *modloader_resolve_method_get(void *klass, const char *name, int param_count) {
+void *modloader_resolve_method_get_with_params(void *klass, const char *name, int param_count) {
     if (!klass) return nullptr;
     auto *cls = static_cast<UnityResolve::Class*>(klass);
-    // 用 args vector 进行匹配
     std::vector<std::string> args;
     if (param_count > 0) args.assign(param_count, "*");
     auto *method = cls->Get<UnityResolve::Method>(name, args);
     LOGI("Method Get(%s, %d args) = %p", name, param_count, (void*)method);
     return (void*)method;
+}
+
+/**
+ * 按名称查找方法（不限制参数个数）。
+ */
+void *modloader_resolve_method_get(void *klass, const char *name) {
+    if (!klass) return nullptr;
+    auto *cls = static_cast<UnityResolve::Class*>(klass);
+    auto *method = cls->Get<UnityResolve::Method>(name);
+    LOGI("Method Get(%s) = %p", name, (void*)method);
+    return (void*)method;
+}
+
+/**
+ * 获取方法的参数个数。
+ */
+int modloader_resolve_method_get_param_count(void *method) {
+    if (!method) return 0;
+    return (int)static_cast<UnityResolve::Method*>(method)->args.size();
+}
+
+/**
+ * 获取方法参数名（按索引）。
+ */
+const char *modloader_resolve_method_get_param_name(void *method, int index) {
+    if (!method) return "";
+    auto *m = static_cast<UnityResolve::Method*>(method);
+    if (index < 0 || index >= (int)m->args.size()) return "";
+    return m->args[index]->name.c_str();
+}
+
+/**
+ * 获取方法返回类型名。
+ */
+const char *modloader_resolve_method_get_return_type_name(void *method) {
+    if (!method) return "";
+    auto *m = static_cast<UnityResolve::Method*>(method);
+    return m->return_type ? m->return_type->name.c_str() : "";
 }
 
 /**
@@ -203,10 +300,12 @@ void *modloader_resolve_method_runtime_invoke(void *method, void *obj, void **ar
     if (!method) return nullptr;
 
     auto *m = static_cast<UnityResolve::Method*>(method);
-    // 构建参数数组
+    // args[] 来自 C# nint[]，每个元素是参数值本身。
+    // il2cpp_runtime_invoke 要求 void** 每个元素指向参数值，
+    // 所以用 &args[i] 指向 args 数组中的值。
     void *argArray[32] = {};
     int n = arg_count < 32 ? arg_count : 31;
-    for (int i = 0; i < n; i++) argArray[i] = args[i];
+    for (int i = 0; i < n; i++) argArray[i] = &args[i];
 
     // il2cpp_runtime_invoke 和 mono_runtime_invoke 签名相同
     // il2cpp: void* il2cpp_runtime_invoke(MethodInfo*, void*, void**, MonoException**)
@@ -269,6 +368,15 @@ int32_t modloader_resolve_field_get_offset(void *field) {
 int modloader_resolve_field_is_static(void *field) {
     if (!field) return 0;
     return static_cast<UnityResolve::Field*>(field)->static_field ? 1 : 0;
+}
+
+/**
+ * 获取字段类型名。
+ */
+const char *modloader_resolve_field_get_type_name(void *field) {
+    if (!field) return "";
+    auto *f = static_cast<UnityResolve::Field*>(field);
+    return f->type ? f->type->name.c_str() : "";
 }
 
 /**

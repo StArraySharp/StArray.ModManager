@@ -30,9 +30,9 @@ public static class AndroidLog
         modloader_log_write((int)prio, tag, msg);
     }
 
-    public static void Verbose(string tag, string msg) => Write(Priority.Verbose, tag, msg);
-    public static void Debug(string tag, string msg)   => Write(Priority.Debug, tag, msg);
-    public static void Info(string tag, string msg)    => Write(Priority.Info, tag, msg);
-    public static void Warn(string tag, string msg)    => Write(Priority.Warn, tag, msg);
+    public static void Verbose(string tag, string msg) => Write(Priority.Error, tag, $"[VERBOSE] {msg}");
+    public static void Debug(string tag, string msg)   => Write(Priority.Error, tag, $"[DEBUG] {msg}");
+    public static void Info(string tag, string msg)    => Write(Priority.Error, tag, $"[INFO] {msg}");
+    public static void Warn(string tag, string msg)    => Write(Priority.Error, tag, $"[WARN] {msg}");
     public static void Error(string tag, string msg)   => Write(Priority.Error, tag, msg);
 }

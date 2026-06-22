@@ -49,6 +49,17 @@ public class UnityResolve
     /// <summary>将当前线程从 Mono/Il2Cpp 域分离。</summary>
     public void ThreadDetach() => _NativeThreadDetach();
 
+    /// <summary>
+    /// 导出所有程序集的反射信息到文件。
+    /// 生成 path/dump.cs（类/方法/字段声明）和 path/struct.hpp（C++ 内存布局）。
+    /// </summary>
+    /// <param name="path">输出目录路径</param>
+    public void DumpToFile(string path)
+    {
+        EnsureInit();
+        _NativeDumpToFile(path);
+    }
+
     // ========================================================================
     // Assembly access
     // ========================================================================
@@ -112,6 +123,30 @@ public class UnityResolve
             return ptr != IntPtr.Zero ? new Class(ptr) : null;
         }
 
+        /// <summary>程序集中的类数量。</summary>
+        public int ClassCount => _NativeAssemblyGetClassCount(_ptr);
+
+        /// <summary>按索引获取类。</summary>
+        public Class? GetClassAt(int index)
+        {
+            var ptr = _NativeAssemblyGetClassAt(_ptr, index);
+            return ptr != IntPtr.Zero ? new Class(ptr) : null;
+        }
+
+        /// <summary>遍历所有类。</summary>
+        public IEnumerable<Class> Classes
+        {
+            get
+            {
+                int count = ClassCount;
+                for (int i = 0; i < count; i++)
+                {
+                    var c = GetClassAt(i);
+                    if (c != null) yield return c;
+                }
+            }
+        }
+
         public static implicit operator nint(Assembly? a) => a?._ptr ?? IntPtr.Zero;
         public static explicit operator Assembly(nint ptr) => new(ptr);
     }
@@ -138,12 +173,16 @@ public class UnityResolve
         public string FullName => string.IsNullOrEmpty(Namespace) ? Name : Namespace + "." + Name;
 
         /// <summary>按名称查找方法（不限制参数个数）。</summary>
-        public Method? GetMethod(string name) => GetMethod(name, -1);
+        public Method? GetMethod(string name)
+        {
+            var ptr = _NativeMethodGet(_ptr, name);
+            return ptr != IntPtr.Zero ? new Method(ptr) : null;
+        }
 
         /// <summary>按名称和参数数量查找方法。</summary>
         public Method? GetMethod(string name, int paramCount)
         {
-            var ptr = _NativeMethodGet(_ptr, name, paramCount);
+            var ptr = _NativeMethodGetWithParams(_ptr, name, paramCount);
             return ptr != IntPtr.Zero ? new Method(ptr) : null;
         }
 
@@ -152,6 +191,54 @@ public class UnityResolve
         {
             var ptr = _NativeFieldGet(_ptr, name);
             return ptr != IntPtr.Zero ? new Field(ptr) : null;
+        }
+
+        /// <summary>类中的方法数量。</summary>
+        public int MethodCount => _NativeClassGetMethodCount(_ptr);
+
+        /// <summary>按索引获取方法。</summary>
+        public Method? GetMethodAt(int index)
+        {
+            var ptr = _NativeClassGetMethodAt(_ptr, index);
+            return ptr != IntPtr.Zero ? new Method(ptr) : null;
+        }
+
+        /// <summary>遍历所有方法。</summary>
+        public IEnumerable<Method> Methods
+        {
+            get
+            {
+                int count = MethodCount;
+                for (int i = 0; i < count; i++)
+                {
+                    var m = GetMethodAt(i);
+                    if (m != null) yield return m;
+                }
+            }
+        }
+
+        /// <summary>类中的字段数量。</summary>
+        public int FieldCount => _NativeClassGetFieldCount(_ptr);
+
+        /// <summary>按索引获取字段。</summary>
+        public Field? GetFieldAt(int index)
+        {
+            var ptr = _NativeClassGetFieldAt(_ptr, index);
+            return ptr != IntPtr.Zero ? new Field(ptr) : null;
+        }
+
+        /// <summary>遍历所有字段。</summary>
+        public IEnumerable<Field> Fields
+        {
+            get
+            {
+                int count = FieldCount;
+                for (int i = 0; i < count; i++)
+                {
+                    var f = GetFieldAt(i);
+                    if (f != null) yield return f;
+                }
+            }
         }
 
         public static implicit operator nint(Class? c) => c?._ptr ?? IntPtr.Zero;
@@ -175,6 +262,16 @@ public class UnityResolve
 
         /// <summary>是否为静态方法。</summary>
         public bool IsStatic => _NativeMethodIsStatic(_ptr) != 0;
+
+        /// <summary>参数个数。</summary>
+        public int ParamCount => _NativeMethodGetParamCount(_ptr);
+
+        /// <summary>按索引获取参数名。</summary>
+        public string GetParamName(int index)
+            => ReadAnsiString(_NativeMethodGetParamName(_ptr, index));
+
+        /// <summary>返回类型名。</summary>
+        public string ReturnTypeName => ReadAnsiString(_NativeMethodGetReturnTypeName(_ptr));
 
         /// <summary>获取原生函数指针（需先 Compile）。</summary>
         public nint FunctionPtr
@@ -244,6 +341,9 @@ public class UnityResolve
 
         /// <summary>是否为静态字段。</summary>
         public bool IsStatic => _NativeFieldIsStatic(_ptr) != 0;
+
+        /// <summary>字段类型名。</summary>
+        public string TypeName => ReadAnsiString(_NativeFieldGetTypeName(_ptr));
 
         /// <summary>从实例对象读取字段值（按偏移量，返回指针）。</summary>
         public nint GetValuePtr(nint obj)
@@ -338,6 +438,9 @@ public class UnityResolve
     [DllImport(Lib, EntryPoint = "modloader_resolve_thread_detach")]
     private static extern void _NativeThreadDetach();
 
+    [DllImport(Lib, EntryPoint = "modloader_resolve_dump_to_file")]
+    private static extern void _NativeDumpToFile(string path);
+
     [DllImport(Lib, EntryPoint = "modloader_resolve_get_assembly")]
     private static extern nint _NativeGetAssembly(string name);
 
@@ -360,7 +463,10 @@ public class UnityResolve
     private static extern nint _NativeClassGetNamespace(nint klass);
 
     [DllImport(Lib, EntryPoint = "modloader_resolve_method_get")]
-    private static extern nint _NativeMethodGet(nint klass, string name, int paramCount);
+    private static extern nint _NativeMethodGet(nint klass, string name);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_method_get_with_params")]
+    private static extern nint _NativeMethodGetWithParams(nint klass, string name, int paramCount);
 
     [DllImport(Lib, EntryPoint = "modloader_resolve_method_get_name")]
     private static extern nint _NativeMethodGetName(nint method);
@@ -403,6 +509,36 @@ public class UnityResolve
 
     [DllImport(Lib, EntryPoint = "modloader_resolve_field_get_static_value")]
     private static extern void _NativeFieldGetStaticValue(nint field, nint outPtr);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_method_get_return_type_name")]
+    private static extern nint _NativeMethodGetReturnTypeName(nint method);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_method_get_param_count")]
+    private static extern int _NativeMethodGetParamCount(nint method);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_method_get_param_name")]
+    private static extern nint _NativeMethodGetParamName(nint method, int index);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_class_get_method_count")]
+    private static extern int _NativeClassGetMethodCount(nint klass);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_class_get_method_at")]
+    private static extern nint _NativeClassGetMethodAt(nint klass, int index);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_class_get_field_count")]
+    private static extern int _NativeClassGetFieldCount(nint klass);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_class_get_field_at")]
+    private static extern nint _NativeClassGetFieldAt(nint klass, int index);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_assembly_get_class_count")]
+    private static extern int _NativeAssemblyGetClassCount(nint assembly);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_assembly_get_class_at")]
+    private static extern nint _NativeAssemblyGetClassAt(nint assembly, int index);
+
+    [DllImport(Lib, EntryPoint = "modloader_resolve_field_get_type_name")]
+    private static extern nint _NativeFieldGetTypeName(nint field);
 
     [DllImport(Lib, EntryPoint = "modloader_resolve_invoke_static")]
     private static extern nint _NativeInvokeStatic(

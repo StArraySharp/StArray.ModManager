@@ -409,9 +409,8 @@ public:
 		}
 	}
 
-#if WINDOWS_MODE || LINUX_MODE || IOS_MODE /*__cplusplus >= 202002L*/
 	static auto DumpToFile(const std::string path) -> void {
-		std::ofstream io(path + "dump.cs", std::fstream::out);
+		std::ofstream io(path + "/dump.cs", std::fstream::out);
 		if (!io) return;
 
 		for (const auto& pAssembly : assembly) {
@@ -609,7 +608,7 @@ public:
 		io2 << '\n';
 		io2.close();
 	}
-#endif
+
 
 	template <typename Return, typename... Args>
 	static auto Invoke(const std::string& funcName, Args... args) -> Return {

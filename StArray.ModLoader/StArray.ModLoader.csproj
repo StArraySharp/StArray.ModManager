@@ -7,14 +7,19 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>StArray.ModLoader</RootNamespace>
     <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- CoreCLR embedded runtime config generation -->
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenTK" Version="4.9.4" />
-    <PackageReference Include="ImGui.NET" Version="1.89.9.3" />
+    <PackageReference Include="OpenTK.Graphics" Version="4.9.4" />
+    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Unity\" />
   </ItemGroup>
 
 </Project>

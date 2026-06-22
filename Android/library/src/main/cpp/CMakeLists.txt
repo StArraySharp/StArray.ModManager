@@ -18,14 +18,17 @@ else()
     add_compile_options(-O2 -DNDEBUG)
 endif()
 
+add_compile_options(-Wno-deprecated-declarations)
+
 # ---- Source files ----
 set(MODLOADER_SOURCES
     core/dobby_hook.cpp
     core/unity_resolve.cpp
+    core/jni_helper.c
 )
 
 set(MONODROID_SOURCES
-    core/monodroid-coreclr.c
+    core/mono_droid_coreclr.c
 )
 
 # ---- libmodloader.so (Dobby + UnityResolve + log_write) ----
@@ -58,7 +61,28 @@ set_target_properties(clrjit PROPERTIES
 # ---- cimgui: build from source as shared library ----
 set(IMGUI_STATIC OFF CACHE BOOL "" FORCE)
 set(IMGUI_FREETYPE OFF CACHE BOOL "" FORCE)
+
+# Apply cimgui backends patch (--forward skips already-applied hunks)
+set(CIMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libs/cimgui)
+set(CIMGUI_PATCH ${CMAKE_CURRENT_SOURCE_DIR}/libs/cimgui_backends.patch)
+
+if(EXISTS ${CIMGUI_PATCH})
+    execute_process(
+        COMMAND patch --forward -p1 -i ${CIMGUI_PATCH}
+        WORKING_DIRECTORY ${CIMGUI_DIR}
+        RESULT_VARIABLE PATCH_RESULT
+    )
+    if(PATCH_RESULT EQUAL 0)
+        message(STATUS "cimgui backends patch applied")
+    endif()
+endif()
+
 add_subdirectory(libs/cimgui ${CMAKE_CURRENT_BINARY_DIR}/cimgui)
+
+# Clean up stale patch marker (no longer used, dry-run detection replaced it)
+set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
+    "${CIMGUI_DIR}/.backends_patched"
+)
 
 # ---- Include directories (modloader) ----
 target_include_directories(modloader
@@ -85,6 +109,7 @@ target_link_libraries(modloader
     ${log-lib}
     dobby
     cimgui
+    android
 )
 
 # ---- Post-build: copy libcimgui.so alongside libmodloader.so ----
