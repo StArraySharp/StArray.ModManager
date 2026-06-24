@@ -13,33 +13,60 @@ Android IL2CPP Unity mod manager with CoreCLR runtime embedding and ImGui overla
 ## Project Structure
 
 ```
-StArray.ModManager/          C# mod manager (.NET 10, output: ModManager.dll)
+StArray.ModManager/          C# mod manager (.NET 10)
+  UI/
+    ImGuiRender.cs           EGL rendering + GL debug panel + rainbow shader
+    ImGuiEGLRender.cs        EGL renderer (IImGuiRenderer, split architecture)
+    ImGuiInputHandler.cs     Touch/key hooks + IME callback bridge
+    ImGuiVulkanRenderer.cs   Vulkan renderer (experimental)
+    ModManagerUI.cs          ImGui mod manager UI
+    IImGuiRenderer.cs        Renderer interface
+    FontAwesome7.cs          FA7 icon codepoints
+  PInvoke/
+    Dobby.cs                 Inline hook wrapper
+    DL.cs                    dlopen/dlsym
+    JniHelperNative.cs       JNI ↔ C data bridge
+    ImGuiBackends.cs         cimgui P/Invoke (OpenGL3, Android, Vulkan)
+    Misc.cs                  C callback registration
+    AndroidLog.cs            Logcat logging
+    UnityResolve.cs          IL2CPP reflection engine
   Manager/
-    ImGuiRender.cs          EGL rendering + ImGui UI
-    GLESBindingsContext.cs  OpenGL ES bindings
-    MotionInputProvider.cs  Touch input
-    IInputProvider.cs       Input provider interface
-  Java/
-    JniWrapper.cs           JNI class/object wrappers
-    AndroidLog.cs           Logcat logging
-  Dobby.cs                  Inline hook wrapper
-  UnityResolve.cs           IL2CPP/Mono reflection engine
-  Il2CppFunctions.cs        IL2CPP P/Invoke bindings
-  Mono.cs                   CoreCLR entry point
+    IInputProvider.cs        Input provider interface
+    MotionInputProvider.cs   Motion event hook
+    MotionEventHook.cs       InputConsumer hook
+    AndroidIME.cs            IME manager
+  Unity/
+    UnitySurfaceHelper.cs    ANativeWindow from Unity SurfaceView
+  Mono.cs                    CoreCLR entry point (old)
+  Managed.cs                 CoreCLR entry with argc/argv
 
-Android/library/            Native Android library (libmodmanager.so)
+Android/library/             Native library (libmodmanager.so)
   src/main/cpp/core/
-    dobby_hook.cpp          Dobby inline hook
-    mono_droid_coreclr.c    CoreCLR embedding
-    jni_helper.c            JNI helpers + Java/C# data bridge
-    unity_resolve.cpp       Unity symbol resolution
+    dobby_hook.cpp           Dobby inline hook
+    mono_droid_coreclr.c     CoreCLR embedding + args delegate
+    jni_helper.c             JNI helpers, data bridge, C callback dispatch
+    unity_resolve.cpp        Unity symbol resolution
   src/main/java/
-    ModManagerUtils.java    Hidden EditText IME, data bridge
+    MonoRunner.java          CoreCLR launcher (supports args)
+    ModManagerUtils.java     KeyboardView IME + InputConnection bridge
 
-Runtime/runtime/            .NET runtime assemblies for CoreCLR embedding
+Android/launcher/            Smali launcher module
+  src/main/smali/            ModManager.smali, ModManager$1.smali
 
-TestAndroidProject/         Test Unity app (IL2CPP, arm64-v8a)
+TestAndroidProject/          Test Unity app (IL2CPP, arm64-v8a)
 ```
+
+## Features
+
+- **EGL SwapBuffers hook** with Dobby — renders ImGui overlay every frame
+- **Touch & key input** via InputConsumer hooks + cimgui Android backend
+- **IME support** (Chinese/Japanese) via custom KeyboardView + InputConnection bridge
+- **C→C# callback pipeline** — Java `commitText` → native `nativeSendChar` → C# `AddInputCharacter` in real time
+- **GL debug panel** — caps toggles (depth, blend, cull, etc.), blend/depth func selectors, GL state queries, viewport info
+- **Rainbow text shader** — custom GLSL shader applied via ImDrawList callbacks
+- **FontAwesome 7** icon support via embedded resource
+- **IImGuiRenderer** interface — swap between EGL, Vulkan backends
+- **CoreCLR args** — pass `string[]` from Java `MonoRunner.run()` to managed `Entry(int, IntPtr)`
 
 ## Build
 
@@ -60,6 +87,12 @@ cd Android
 - Android arm64-v8a
 - IL2CPP Unity games (API 26+)
 - CoreCLR .NET 10 runtime
+
+## Getting Started
+
+See [GET_STARTED.md](GET_STARTED.md) for injection and build instructions.
+
+Runtime assemblies can be downloaded from the [runtime-references release](https://github.com/StArraySharp/StArray.ModManager/releases/tag/0).
 
 ---
 
