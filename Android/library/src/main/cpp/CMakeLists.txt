@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 
 # Project name and version
-project("modloader" VERSION 1.0.0 LANGUAGES C CXX)
+project("modmanager" VERSION 1.0.0 LANGUAGES C CXX)
 
 # ---- Build options ----
 set(CMAKE_C_STANDARD 11)
@@ -21,7 +21,7 @@ endif()
 add_compile_options(-Wno-deprecated-declarations)
 
 # ---- Source files ----
-set(MODLOADER_SOURCES
+set(MODMANAGER_SOURCES
     core/dobby_hook.cpp
     core/unity_resolve.cpp
     core/jni_helper.c
@@ -31,8 +31,8 @@ set(MONODROID_SOURCES
     core/mono_droid_coreclr.c
 )
 
-# ---- libmodloader.so (Dobby + UnityResolve + log_write) ----
-add_library(modloader SHARED ${MODLOADER_SOURCES})
+# ---- libmodmanager.so (Dobby + UnityResolve + log_write) ----
+add_library(modmanager SHARED ${MODMANAGER_SOURCES})
 
 # ---- libmonodroid.so (CoreCLR JNI host) ----
 add_library(monodroid SHARED ${MONODROID_SOURCES})
@@ -84,8 +84,8 @@ set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
     "${CIMGUI_DIR}/.backends_patched"
 )
 
-# ---- Include directories (modloader) ----
-target_include_directories(modloader
+# ---- Include directories (modmanager) ----
+target_include_directories(modmanager
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/core
@@ -102,22 +102,22 @@ target_include_directories(monodroid
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/coreclr/include
 )
 
-# ---- Link libraries (modloader) ----
+# ---- Link libraries (modmanager) ----
 find_library(log-lib log)
 
-target_link_libraries(modloader
+target_link_libraries(modmanager
     ${log-lib}
     dobby
     cimgui
     android
 )
 
-# ---- Post-build: copy libcimgui.so alongside libmodloader.so ----
-add_custom_command(TARGET modloader POST_BUILD
+# ---- Post-build: copy libcimgui.so alongside libmodmanager.so ----
+add_custom_command(TARGET modmanager POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:cimgui>"
-        "$<TARGET_FILE_DIR:modloader>/libcimgui.so"
-    COMMENT "Copying libcimgui.so to modloader output"
+        "$<TARGET_FILE_DIR:modmanager>/libcimgui.so"
+    COMMENT "Copying libcimgui.so to modmanager output"
 )
 
 # ---- Link libraries (monodroid) ----

@@ -7,5 +7,5 @@
     native <methods>;
 }
 
-# Keep ModLoader API
--keep class starray.android.modloader.** { *; }
+# Keep ModManager API
+-keep class starray.android.modmanager.** { *; }

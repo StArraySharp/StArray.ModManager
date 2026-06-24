@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StArray.ModLoader.Android"
+rootProject.name = "StArray.ModManager.Android"
 include ':library'

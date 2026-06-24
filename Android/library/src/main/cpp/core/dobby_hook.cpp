@@ -4,14 +4,14 @@
 
 #include <dobby.h>
 
-#define LOG_TAG "StArray.ModLoader.Dobby"
+#define LOG_TAG "StArray.ModManager.Dobby"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // ============================================================================
 // C ABI exports for P/Invoke from C# (Mono)
-// 命名规范: modloader_dobby_xxx
-// C# 通过 [DllImport("modloader")] 直接调用
+// 命名规范: modmanager_dobby_xxx
+// C# 通过 [DllImport("modmanager")] 直接调用
 // ============================================================================
 extern "C" {
 
@@ -22,7 +22,7 @@ extern "C" {
  * @param origin_func    [out] 保存原函数地址的指针
  * @return 0 成功，非 0 失败
  */
-int modloader_dobby_hook(void *address, void *replace_func, void **origin_func) {
+int modmanager_dobby_hook(void *address, void *replace_func, void **origin_func) {
     LOGI("DobbyHook at %p, replace=%p", address, replace_func);
     int ret = DobbyHook(address, (dobby_dummy_func_t)replace_func, (dobby_dummy_func_t *)origin_func);
     if (ret != 0) LOGE("DobbyHook failed at %p, ret=%d", address, ret);
@@ -35,7 +35,7 @@ int modloader_dobby_hook(void *address, void *replace_func, void **origin_func) 
  * @param pre_handler  前置回调 (dobby_instrument_callback_t)
  * @return 0 成功
  */
-int modloader_dobby_instrument(void *address, void *pre_handler) {
+int modmanager_dobby_instrument(void *address, void *pre_handler) {
     LOGI("DobbyInstrument at %p, handler=%p", address, pre_handler);
     return DobbyInstrument(address, (dobby_instrument_callback_t)pre_handler);
 }
@@ -45,7 +45,7 @@ int modloader_dobby_instrument(void *address, void *pre_handler) {
  * @param address  被 hook 的函数地址
  * @return 0 成功
  */
-int modloader_dobby_destroy(void *address) {
+int modmanager_dobby_destroy(void *address) {
     LOGI("DobbyDestroy at %p", address);
     return DobbyDestroy(address);
 }
@@ -56,7 +56,7 @@ int modloader_dobby_destroy(void *address) {
  * @param symbol_name   符号名
  * @return 符号地址，失败返回 nullptr
  */
-void *modloader_dobby_symbol_resolver(const char *image_name, const char *symbol_name) {
+void *modmanager_dobby_symbol_resolver(const char *image_name, const char *symbol_name) {
     void *addr = DobbySymbolResolver(image_name, symbol_name);
     LOGI("DobbySymbolResolver(%s, %s) = %p", image_name, symbol_name, addr);
     return addr;
@@ -69,7 +69,7 @@ void *modloader_dobby_symbol_resolver(const char *image_name, const char *symbol
  * @param buffer_size  补丁数据大小
  * @return 0 成功
  */
-int modloader_dobby_code_patch(void *address, const uint8_t *buffer, uint32_t buffer_size) {
+int modmanager_dobby_code_patch(void *address, const uint8_t *buffer, uint32_t buffer_size) {
     LOGI("DobbyCodePatch at %p, size=%u", address, buffer_size);
     return DobbyCodePatch(address, (uint8_t *)buffer, buffer_size);
 }
@@ -77,16 +77,16 @@ int modloader_dobby_code_patch(void *address, const uint8_t *buffer, uint32_t bu
 /**
  * DobbyGetVersion — 获取 Dobby 版本字符串。
  */
-const char *modloader_dobby_get_version(void) {
+const char *modmanager_dobby_get_version(void) {
     return DobbyGetVersion();
 }
 
 /**
- * modloader_log_write — write a line to Android logcat.
- * Called from C# via [DllImport("modloader")].
+ * modmanager_log_write — write a line to Android logcat.
+ * Called from C# via [DllImport("modmanager")].
  */
-void modloader_log_write(int prio, const char *tag, const char *msg) {
-    __android_log_write(prio, tag ? tag : "ModLoader", msg ? msg : "");
+void modmanager_log_write(int prio, const char *tag, const char *msg) {
+    __android_log_write(prio, tag ? tag : "ModManager", msg ? msg : "");
 }
 
 } // extern "C"

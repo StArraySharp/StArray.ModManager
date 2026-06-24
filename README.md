@@ -1,10 +1,10 @@
-# StArray.ModLoader
+# StArray.ModManager
 
-Android IL2CPP Unity mod loader with CoreCLR runtime embedding and ImGui overlay UI.
+Android IL2CPP Unity mod manager with CoreCLR runtime embedding and ImGui overlay UI.
 
 ## How It Works
 
-1. **Native injection** via `libmodloader.so` loaded into Unity process
+1. **Native injection** via `libmodmanager.so` loaded into Unity process
 2. **Dobby hook** on `eglSwapBuffers` and Android input events
 3. **CoreCLR embedded** at runtime, launching .NET managed code from JNI
 4. **UnityResolve** reflection engine traverses IL2CPP/Mono managed types
@@ -13,7 +13,7 @@ Android IL2CPP Unity mod loader with CoreCLR runtime embedding and ImGui overlay
 ## Project Structure
 
 ```
-StArray.ModLoader/          C# mod loader (.NET 10, output: ModLoader.dll)
+StArray.ModManager/          C# mod manager (.NET 10, output: ModManager.dll)
   Manager/
     ImGuiRender.cs          EGL rendering + ImGui UI
     GLESBindingsContext.cs  OpenGL ES bindings
@@ -27,7 +27,7 @@ StArray.ModLoader/          C# mod loader (.NET 10, output: ModLoader.dll)
   Il2CppFunctions.cs        IL2CPP P/Invoke bindings
   Mono.cs                   CoreCLR entry point
 
-Android/library/            Native Android library (libmodloader.so)
+Android/library/            Native Android library (libmodmanager.so)
   src/main/cpp/core/
     dobby_hook.cpp          Dobby inline hook
     mono_droid_coreclr.c    CoreCLR embedding
@@ -46,8 +46,8 @@ TestAndroidProject/         Test Unity app (IL2CPP, arm64-v8a)
 Requires .NET 10 SDK and Android NDK 27+.
 
 ```bash
-# Build C# mod loader
-cd StArray.ModLoader
+# Build C# mod manager
+cd StArray.ModManager
 dotnet build -c Release
 
 # Build Android native library

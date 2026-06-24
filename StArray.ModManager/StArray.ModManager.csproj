@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>StArray.ModManager</RootNamespace>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- CoreCLR embedded runtime config generation -->
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenTK.Graphics" Version="4.9.4" />
+    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Model\" />
+    <Folder Include="Resources\" />
+    <EmbeddedResource Include="Resources\fa-solid-900.ttf" />
+  </ItemGroup>
+
+</Project>

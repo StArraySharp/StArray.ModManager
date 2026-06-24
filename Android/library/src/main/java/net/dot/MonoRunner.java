@@ -9,9 +9,9 @@ import java.util.ArrayList;
 /**
  * MonoRunner — CoreCLR 启动器。
  * <pre>
- *   MonoRunner.dotnetRoot("/sdcard/ModLoader/runtime")
- *       .addAssemblyDir("/sdcard/ModLoader/loader")
- *       .run("ModLoader.dll", "StArray.ModLoader.Mono", "Entry");
+ *   MonoRunner.dotnetRoot("/sdcard/ModManager/runtime")
+ *       .addAssemblyDir("/sdcard/ModManager/loader")
+ *       .run("ModManager.dll", "StArray.ModManager.Mono", "Entry");
  * </pre>
  */
 public final class MonoRunner {
@@ -25,7 +25,7 @@ public final class MonoRunner {
     static {
         System.loadLibrary("System.Security.Cryptography.Native.Android");
         System.loadLibrary("monodroid");
-        System.loadLibrary("modloader");
+        System.loadLibrary("modmanager");
     }
 
     // ========================================================================
@@ -43,18 +43,33 @@ public final class MonoRunner {
     }
 
     /**
-     * 启动 CoreCLR + delegate 调用入口方法。
+     * 启动 CoreCLR + delegate 调用入口方法（无参）。
      * @param entryDll   入口 DLL 文件名
      * @param typeName   类型全名
      * @param methodName 方法名
      * @return 托管退出码
      */
     public static int run(String entryDll, String typeName, String methodName) {
+        return run(entryDll, typeName, methodName, new String[0]);
+    }
+
+    /**
+     * 启动 CoreCLR + delegate 调用入口方法（带参）。
+     * 托管入口应声明为: static int Entry(int argc, IntPtr argv)
+     * 参见 <a href="https://learn.microsoft.com/dotnet/core/tutorials/netcore-hosting">NET 托管文档</a>
+     * @param entryDll   入口 DLL 文件名
+     * @param typeName   类型全名
+     * @param methodName 方法名
+     * @param args       传给入口方法的参数
+     * @return 托管退出码
+     */
+    public static int run(String entryDll, String typeName, String methodName, String... args) {
         if (s_dotnetRoot == null)
             throw new IllegalStateException("dotnetRoot not set");
 
         Log.i(TAG, "dotnetRoot=" + s_dotnetRoot
                 + " entry=" + entryDll
+                + " args=" + java.util.Arrays.toString(args)
                 + " dirs=" + s_assemblyDirs
                 + " native=" + s_nativeDirs);
 
@@ -80,8 +95,11 @@ public final class MonoRunner {
         s_initialized = true;
         Log.i(TAG, "CoreCLR initialized");
 
-        // delegate 调用
-        return execEntryPoint(entryDll, entryDll, typeName, methodName);
+        // delegate 调用（传参）
+        if (args.length > 0)
+            return execEntryPointWithArgs(entryDll, entryDll, typeName, methodName, args);
+        else
+            return execEntryPoint(entryDll, entryDll, typeName, methodName);
     }
 
     public static void stop() {
@@ -97,6 +115,8 @@ public final class MonoRunner {
     public static native int initRuntime(String libsDir, String entryPointLibName, int localDateTimeOffset);
     public static native int execEntryPoint(String entryPointLibName,
         String assemblyName, String typeName, String methodName);
+    public static native int execEntryPointWithArgs(String entryPointLibName,
+        String assemblyName, String typeName, String methodName, String[] args);
     public static native void freeNativeResources();
 
     private static String join(ArrayList<String> list, String sep) {

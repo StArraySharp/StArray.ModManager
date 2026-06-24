@@ -30,7 +30,11 @@ Java_net_dot_MonoRunner_initRuntime (JNIEnv* env, jclass thiz, jstring j_files_d
                                      jint current_local_time);
 
 int
-Java_net_dot_MonoRunner_execEntryPoint (JNIEnv* env, jobject thiz, jstring j_entryPointLibName, jstring j_assemblyName, jstring j_typeName, jstring j_methodName);
+Java_net_dot_MonoRunner_execEntryPoint (JNIEnv* env, jclass thiz, jstring j_entryPointLibName, jstring j_assemblyName, jstring j_typeName, jstring j_methodName);
+
+int
+Java_net_dot_MonoRunner_execEntryPointWithArgs (JNIEnv* env, jclass thiz, jstring j_entryPointLibName, jstring j_assemblyName,
+    jstring j_typeName, jstring j_methodName, jobjectArray j_args);
 
 void
 Java_net_dot_MonoRunner_freeNativeResources (JNIEnv* env, jclass thiz);
@@ -65,8 +69,6 @@ static struct host_runtime_contract g_host_contract = {
 #else
 #error Unknown architecture
 #endif
-
-#define RUNTIMECONFIG_BIN_FILE "runtimeconfig.bin"
 
 static void
 strncpy_str (JNIEnv *env, char *buff, jstring str, int nbuff)
@@ -340,6 +342,99 @@ Java_net_dot_MonoRunner_execEntryPoint (JNIEnv* env, jclass thiz,
     if (dot && strcmp(dot, ".dll") == 0) *dot = '\0';
 
     return coreclr_create_delegate_and_call(assemblyName, typeName, methodName);
+}
+
+int
+Java_net_dot_MonoRunner_execEntryPointWithArgs (JNIEnv* env, jclass thiz,
+    jstring j_entryPointLibName,
+    jstring j_assemblyName, jstring j_typeName, jstring j_methodName,
+    jobjectArray j_args)
+{
+    LOG_INFO("Java_net_dot_MonoRunner_execEntryPointWithArgs (CoreCLR create_delegate with args):");
+
+    if ((g_coreclr_handle == NULL) || (g_coreclr_domainId == 0))
+    {
+        LOG_ERROR("CoreCLR not initialized");
+        return -1;
+    }
+
+    char entryPointLibName[2048];
+    char assemblyName[512];
+    char typeName[512];
+    char methodName[256];
+
+    strncpy_str(env, entryPointLibName, j_entryPointLibName, sizeof(entryPointLibName));
+    strncpy_str(env, assemblyName, j_assemblyName, sizeof(assemblyName));
+    strncpy_str(env, typeName, j_typeName, sizeof(typeName));
+    strncpy_str(env, methodName, j_methodName, sizeof(methodName));
+
+    // Strip .dll from assembly name if present
+    char* dot = strrchr(assemblyName, '.');
+    if (dot && strcmp(dot, ".dll") == 0) *dot = '\0';
+
+    // 转换 Java String[] → const char* argv[]
+    jsize argc = (*env)->GetArrayLength(env, j_args);
+    const char** argv = NULL;
+    if (argc > 0)
+    {
+        argv = (const char**)malloc(sizeof(const char*) * (size_t)argc);
+        if (argv == NULL)
+        {
+            LOG_ERROR("Failed to allocate argv");
+            return -1;
+        }
+        for (jsize i = 0; i < argc; i++)
+        {
+            jstring js = (jstring)(*env)->GetObjectArrayElement(env, j_args, i);
+            argv[i] = (*env)->GetStringUTFChars(env, js, NULL);
+        }
+    }
+
+    LOG_INFO("Calling: %s.%s::%s with %d args", assemblyName, typeName, methodName, (int)argc);
+
+    // 托管入口签名: static int MethodName(int argc, IntPtr argv)
+    typedef int (CORECLR_CALLING_CONVENTION *entry_with_args_fn)(int, const char**);
+    entry_with_args_fn entry = NULL;
+
+    int rc = coreclr_create_delegate(
+        g_coreclr_handle, g_coreclr_domainId,
+        assemblyName,
+        typeName,
+        methodName,
+        (void**)&entry);
+
+    if (rc < 0 || entry == NULL)
+    {
+        LOG_ERROR("coreclr_create_delegate (with args) failed: 0x%x", rc);
+        // Cleanup argv
+        if (argv != NULL)
+        {
+            for (jsize i = 0; i < argc; i++)
+            {
+                jstring js = (jstring)(*env)->GetObjectArrayElement(env, j_args, i);
+                (*env)->ReleaseStringUTFChars(env, js, argv[i]);
+            }
+            free(argv);
+        }
+        return -1;
+    }
+
+    LOG_INFO("Calling managed entry point with args...");
+    int exitCode = entry((int)argc, argv);
+    LOG_INFO("Managed entry returned: %d", exitCode);
+
+    // Cleanup argv
+    if (argv != NULL)
+    {
+        for (jsize i = 0; i < argc; i++)
+        {
+            jstring js = (jstring)(*env)->GetObjectArrayElement(env, j_args, i);
+            (*env)->ReleaseStringUTFChars(env, js, argv[i]);
+        }
+        free(argv);
+    }
+
+    return exitCode;
 }
 
 void

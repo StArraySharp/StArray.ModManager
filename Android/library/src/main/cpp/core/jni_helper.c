@@ -644,7 +644,7 @@ static DataSlot* find_slot(const char *key) {
 
 /** Java → C: nativeSetData(String key, int[] data) */
 JNIEXPORT void JNICALL
-Java_starray_android_modloader_ModManagerUtils_nativeSetData(
+Java_starray_android_modmanager_ModManagerUtils_nativeSetData(
     JNIEnv *env, jclass unused, jstring key, jintArray data) {
     const char *k = (*env)->GetStringUTFChars(env, key, NULL);
     DataSlot *s = find_slot(k);
@@ -664,7 +664,7 @@ Java_starray_android_modloader_ModManagerUtils_nativeSetData(
 
 /** Java ← C: nativeGetData(String key) → int[] */
 JNIEXPORT jintArray JNICALL
-Java_starray_android_modloader_ModManagerUtils_nativeGetData(
+Java_starray_android_modmanager_ModManagerUtils_nativeGetData(
     JNIEnv *env, jclass unused, jstring key) {
     const char *k = (*env)->GetStringUTFChars(env, key, NULL);
     DataSlot *s = find_slot(k);
@@ -699,6 +699,52 @@ int jnihelper_get_data_len(const char *key) {
 jint* jnihelper_get_data_buf(const char *key) {
     DataSlot *s = find_slot(key);
     return s ? s->buf : NULL;
+}
+
+// ===== C# 回调注册（Java nativeSendChar → C → C# callback） =====
+
+typedef void (*onAcceptChar_cb)(unsigned int codepoint);
+static onAcceptChar_cb g_onAcceptChar;
+
+void modmanager_set_OnAcceptCharCallback(onAcceptChar_cb callback) {
+    g_onAcceptChar = callback;
+}
+
+typedef void (*onAcceptKey_cb)(int keyCode);
+static onAcceptKey_cb g_onAcceptKey;
+
+void modmanager_set_OnAcceptKeyCallback(onAcceptKey_cb callback) {
+    g_onAcceptKey = callback;
+}
+
+// === 实时 IME 字符注入 (KeyboardView → commitText → nativeSendChar) ===
+
+JNIEXPORT void JNICALL
+Java_starray_android_modmanager_ModManagerUtils_nativeSendChar(
+    JNIEnv *env, jclass unused, jint unicode) {
+    // 优先走 C# 回调（实时），未注册时回退到 buffer
+    if (g_onAcceptChar) {
+        g_onAcceptChar((unsigned int)unicode);
+        return;
+    }
+    DataSlot *s = find_slot("ime_text");
+    if (!s) return;
+    if (s->len >= DATA_BUF_SIZE) return;
+    s->buf[s->len++] = unicode;
+}
+
+JNIEXPORT void JNICALL
+Java_starray_android_modmanager_ModManagerUtils_nativeSendKey(
+    JNIEnv *env, jclass unused, jint keyCode) {
+    // 优先走 C# 回调（实时），未注册时回退到 buffer
+    if (g_onAcceptKey) {
+        g_onAcceptKey(keyCode);
+        return;
+    }
+    DataSlot *s = find_slot("ime_text");
+    if (!s) return;
+    if (s->len >= DATA_BUF_SIZE) return;
+    s->buf[s->len++] = -keyCode;
 }
 
 /**

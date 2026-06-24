@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace 'starray.android.modloader'
+    namespace 'starray.android.modmanager'
     compileSdk 35
     ndkVersion "27.2.12479018"
 
