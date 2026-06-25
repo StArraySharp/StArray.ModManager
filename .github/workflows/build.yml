@@ -1,0 +1,97 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  # ──── Android AAR ────
+  android:
+    name: Android AAR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-35
+            ndk;27.2.12479018
+            build-tools;35.0.0
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build AAR
+        working-directory: Android
+        run: ./gradlew :library:assembleRelease
+
+      - name: Upload AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-release.aar
+          path: Android/library/build/outputs/aar/library-release.aar
+
+  # ──── .NET Manager ────
+  manager:
+    name: .NET Manager
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        working-directory: StArray.ModManager
+        run: dotnet build -c Release
+
+      - name: Package output (exclude runtimes)
+        run: |
+          src="StArray.ModManager/bin/Release/net10.0"
+          dst="artifacts"
+          mkdir -p "$dst"
+          cp -r "$src"/* "$dst/"
+          rm -rf "$dst/runtimes"
+          cd "$dst" && zip -r ../manager-release.zip . && cd ..
+
+      - name: Upload Manager
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-release.zip
+          path: manager-release.zip
+
+  # ──── Release (tag only) ────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, manager]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          merge-multiple: true
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/library-release.aar
+            artifacts/manager-release.zip
+          generate_release_notes: true
