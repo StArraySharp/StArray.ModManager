@@ -1,7 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
-using StArray.ModManager.PInvoke;
+using StArray.ModManager.Native;
+using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.UI;
 
@@ -47,7 +48,7 @@ public static class ImGuiInputHandler
             }
         });
 
-        AndroidUtils.Info(nameof(ImGuiInputHandler), "Input hooks installed");
+        Logger.Info(nameof(ImGuiInputHandler), "Input hooks installed");
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -76,6 +77,6 @@ public static class ImGuiInputHandler
         }
 
         s_utilsClass.CallStaticVoidMethod1(s_showKeyboardMethod, want ? 1 : 0);
-        AndroidUtils.Info(nameof(ImGuiInputHandler), $"IME {(want ? "Show" : "Hide")}");
+        Logger.Info(nameof(ImGuiInputHandler), $"IME {(want ? "Show" : "Hide")}");
     }
 }

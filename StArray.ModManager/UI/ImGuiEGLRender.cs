@@ -3,7 +3,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
 using OpenTK.Graphics.Egl;
-using StArray.ModManager.PInvoke;
+using StArray.ModManager.Native;
+using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.UI;
 
@@ -81,7 +82,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             s_pendingOnRender = null;
         }
 
-        AndroidUtils.Error(nameof(ImGuiEGLRenderer), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
+        Logger.Error(nameof(ImGuiEGLRenderer), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
         return true;
     }
 
@@ -126,7 +127,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         }
         catch (Exception ex)
         {
-            AndroidUtils.Error(nameof(ImGuiEGLRenderer), $"OnSwapBuffers error: {ex}");
+            Logger.Error(nameof(ImGuiEGLRenderer), $"OnSwapBuffers error: {ex}");
         }
 
         return self._prevSwapBuffersDelegate!(display, surface);
@@ -136,17 +137,17 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
     {
         if (_initialized) return;
 
-        AndroidUtils.Error(nameof(ImGuiEGLRenderer), "Initializing ImGui with official backends...");
+        Logger.Error(nameof(ImGuiEGLRenderer), "Initializing ImGui with official backends...");
 
         // 从 EGL surface 获取 ANativeWindow
         if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
             !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
         {
-            AndroidUtils.Error(nameof(ImGuiEGLRenderer), "Failed to query EGL surface for initialization");
+            Logger.Error(nameof(ImGuiEGLRenderer), "Failed to query EGL surface for initialization");
             return;
         }
 
-        AndroidUtils.Error(nameof(ImGuiEGLRenderer), $"Surface size: {width}x{height}");
+        Logger.Error(nameof(ImGuiEGLRenderer), $"Surface size: {width}x{height}");
 
         // 创建 ImGui 上下文
         ImGui.CreateContext();
@@ -168,7 +169,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             {
                 var cjk = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
                 io.Fonts.AddFontFromFileTTF(path, 16.0f, null, cjk);
-                AndroidUtils.Info(nameof(ImGuiEGLRenderer), $"CJK font: {path}");
+                Logger.Info(nameof(ImGuiEGLRenderer), $"CJK font: {path}");
                 cjkLoaded = true;
                 break;
             }
@@ -189,22 +190,22 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         if (nativeWindow != IntPtr.Zero)
         {
             ImGuiImplAndroid.Init(nativeWindow);
-            AndroidUtils.Error(nameof(ImGuiEGLRenderer),
+            Logger.Error(nameof(ImGuiEGLRenderer),
                 $"ImGui_ImplAndroid_Init success with window: 0x{nativeWindow:X}");
         }
         else
         {
-            AndroidUtils.Error(nameof(ImGuiEGLRenderer),
+            Logger.Error(nameof(ImGuiEGLRenderer),
                 "Failed to get Unity ANativeWindow, touch input may not work");
         }
 
         ImGuiImplOpenGL3.Init();
 
-        AndroidUtils.Error(nameof(ImGuiEGLRenderer),
+        Logger.Error(nameof(ImGuiEGLRenderer),
             "Touch input handled via ImGui_ImplAndroid");
 
         _initialized = true;
-        AndroidUtils.Error(nameof(ImGuiEGLRenderer),
+        Logger.Error(nameof(ImGuiEGLRenderer),
             "ImGui initialized with official OpenGL3 + Android input backends");
     }
 
@@ -241,7 +242,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
                 io.Fonts.AddFontFromMemoryTTF(ptr, ttf.Length, 16f, cfg, (IntPtr)r);
 
             io.Fonts.Build();
-            AndroidUtils.Info(nameof(ImGuiEGLRenderer),
+            Logger.Info(nameof(ImGuiEGLRenderer),
                 $"FontAwesome merged ({ttf.Length} bytes)");
         }
         catch { /* 找不到资源则静默跳过 */ }

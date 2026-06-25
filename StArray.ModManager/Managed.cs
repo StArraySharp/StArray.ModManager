@@ -1,7 +1,8 @@
 ﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using StArray.ModManager.PInvoke;
+using StArray.ModManager.Manager;
+using StArray.ModManager.Native;
 using StArray.ModManager.Runtime;
 using StArray.ModManager.UI;
 
@@ -27,8 +28,21 @@ public static class Managed
         if (!Directory.Exists(modsPath))
             Directory.CreateDirectory(modsPath);
 
+        // 桥接 Logger → Android logcat
+        Logger.OnLog += (level, tag, msg) =>
+        {
+            var prio = level switch
+            {
+                Logger.Level.Debug => AndroidUtils.Priority.Debug,
+                Logger.Level.Info  => AndroidUtils.Priority.Info,
+                Logger.Level.Warn  => AndroidUtils.Priority.Warn,
+                Logger.Level.Error => AndroidUtils.Priority.Error,
+                _                  => AndroidUtils.Priority.Info
+            };
+            AndroidUtils.Write(prio, tag, msg);
+        };
+
         var loader = new ModLoader(modsPath);
-        loader.OnLogMessage += s => AndroidUtils.Info(nameof(Managed), s);
         ImGuiEGLRender.OnRender += new ModManagerUI(loader).Render;
         ImGuiEGLRender.Install();
         return 0;

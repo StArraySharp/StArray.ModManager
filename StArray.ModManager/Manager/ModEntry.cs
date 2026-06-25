@@ -31,9 +31,6 @@ public class ModEntry
     /// <summary>是否已启用</summary>
     public bool IsEnabled { get; set; }
 
-    /// <summary>加载优先级（数字越小越先加载）</summary>
-    public int LoadPriority { get; set; }
-
     /// <summary>依赖的其他 Mod ID 列表</summary>
     public List<string> Dependencies { get; set; } = new();
 

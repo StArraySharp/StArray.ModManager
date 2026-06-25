@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.PInvoke;
+namespace StArray.ModManager.Native;
 
 // ============================================================================
 // UnityResolve — 实例化的 Unity IL2CPP/Mono 反射 API
@@ -314,6 +314,29 @@ public class UnityResolve
             nint unboxed = _NativeObjectUnbox(ret);
             if (unboxed == IntPtr.Zero) return default;
             return *(T*)unboxed;
+        }
+
+        private static readonly List<Delegate> _hooks = new();
+
+        /// <summary>安装 inline hook / Install inline hook. Returns true on success (0).</summary>
+        public bool Hook<T>(T replace, out T original) where T : Delegate
+        {
+            var result = Dobby.Hook(FunctionPtr, Marshal.GetFunctionPointerForDelegate(replace), out var origin);
+            original = Marshal.GetDelegateForFunctionPointer<T>(origin);
+            if (result == 0) { _hooks.Add(replace); _hooks.Add(original); }
+            return result == 0;
+        }
+
+        /// <summary>移除 hook / Remove hook. Returns true on success (0).</summary>
+        public bool Unhook()
+        {
+            return Dobby.Destroy(FunctionPtr) == 0;
+        }
+
+        /// <summary>内存代码补丁 / Apply code patch at function address.</summary>
+        public bool Patch(byte[] code)
+        {
+            return Dobby.CodePatch(FunctionPtr, code, (uint)code.Length) == 0;
         }
 
         public static implicit operator nint(Method? m) => m?._ptr ?? IntPtr.Zero;

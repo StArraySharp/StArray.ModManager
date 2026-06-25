@@ -2,7 +2,8 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
-using StArray.ModManager.PInvoke;
+using StArray.ModManager.Native;
+using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.UI;
 
@@ -156,7 +157,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         var vulkanLib = DL.dlopen("libvulkan.so", DL.Flags.RTLD_GLOBAL | DL.Flags.RTLD_NOW);
         if (vulkanLib == IntPtr.Zero)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer), "Failed to load libvulkan.so");
+            Logger.Error(nameof(ImGuiVulkanRenderer), "Failed to load libvulkan.so");
             return false;
         }
 
@@ -173,7 +174,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
                     .MethodHandle.GetFunctionPointer(),
                 out var orig);
             _prevCreateInstance = Marshal.GetDelegateForFunctionPointer<VkCreateInstanceDelegate>(orig);
-            AndroidUtils.Info(nameof(ImGuiVulkanRenderer), "Hooked vkCreateInstance");
+            Logger.Info(nameof(ImGuiVulkanRenderer), "Hooked vkCreateInstance");
         }
 
         // Hook vkCreateDevice — 捕获 physicalDevice + device
@@ -185,7 +186,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
                     .MethodHandle.GetFunctionPointer(),
                 out var orig);
             _prevCreateDevice = Marshal.GetDelegateForFunctionPointer<VkCreateDeviceDelegate>(orig);
-            AndroidUtils.Info(nameof(ImGuiVulkanRenderer), "Hooked vkCreateDevice");
+            Logger.Info(nameof(ImGuiVulkanRenderer), "Hooked vkCreateDevice");
         }
 
         // Hook vkGetDeviceQueue — 捕获 queue + queueFamily
@@ -197,14 +198,14 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
                     .MethodHandle.GetFunctionPointer(),
                 out var orig);
             _prevGetDeviceQueue = Marshal.GetDelegateForFunctionPointer<VkGetDeviceQueueDelegate>(orig);
-            AndroidUtils.Info(nameof(ImGuiVulkanRenderer), "Hooked vkGetDeviceQueue");
+            Logger.Info(nameof(ImGuiVulkanRenderer), "Hooked vkGetDeviceQueue");
         }
 
         // Hook vkQueuePresentKHR — 渲染帧触发器
         var addrQueuePresentKHR = Dobby.SymbolResolver("libvulkan.so", "vkQueuePresentKHR");
         if (addrQueuePresentKHR == IntPtr.Zero)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer), "vkQueuePresentKHR not found in libvulkan.so");
+            Logger.Error(nameof(ImGuiVulkanRenderer), "vkQueuePresentKHR not found in libvulkan.so");
             return false;
         }
         Dobby.Hook(addrQueuePresentKHR,
@@ -224,7 +225,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             s_pendingOnRender = null;
         }
 
-        AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+        Logger.Error(nameof(ImGuiVulkanRenderer),
             $"Vulkan hooks installed (instance:{addrCreateInstance:X} device:{addrCreateDevice:X} " +
             $"queue:{addrGetDeviceQueue:X} present:{addrQueuePresentKHR:X})");
         return true;
@@ -250,11 +251,11 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             _pfnEndCommandBuffer == IntPtr.Zero ||
             _pfnQueueSubmit == IntPtr.Zero)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer), "Failed to resolve essential Vulkan functions");
+            Logger.Error(nameof(ImGuiVulkanRenderer), "Failed to resolve essential Vulkan functions");
             return false;
         }
 
-        AndroidUtils.Info(nameof(ImGuiVulkanRenderer), "Vulkan utility functions resolved");
+        Logger.Info(nameof(ImGuiVulkanRenderer), "Vulkan utility functions resolved");
         return true;
     }
 
@@ -270,7 +271,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         if (result == 0 /* VK_SUCCESS */ && self._instance == IntPtr.Zero)
         {
             self._instance = instance;
-            AndroidUtils.Info(nameof(ImGuiVulkanRenderer), $"Captured VkInstance: 0x{instance:X}");
+            Logger.Info(nameof(ImGuiVulkanRenderer), $"Captured VkInstance: 0x{instance:X}");
         }
 
         return result;
@@ -289,7 +290,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         if (result == 0 /* VK_SUCCESS */)
         {
             self._device = device;
-            AndroidUtils.Info(nameof(ImGuiVulkanRenderer),
+            Logger.Info(nameof(ImGuiVulkanRenderer),
                 $"Captured VkDevice: 0x{device:X} (PhysicalDevice: 0x{physicalDevice:X})");
         }
 
@@ -309,7 +310,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         {
             self._queue = queue;
             self._queueFamily = queueFamilyIndex;
-            AndroidUtils.Info(nameof(ImGuiVulkanRenderer),
+            Logger.Info(nameof(ImGuiVulkanRenderer),
                 $"Captured VkQueue: 0x{queue:X} (family={queueFamilyIndex})");
         }
     }
@@ -350,7 +351,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         }
         catch (Exception ex)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer), $"OnQueuePresentKHR error: {ex}");
+            Logger.Error(nameof(ImGuiVulkanRenderer), $"OnQueuePresentKHR error: {ex}");
         }
 
         return self._prevQueuePresentKHR!(queue, pPresentInfo);
@@ -363,7 +364,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         if (_initialized) return;
         if (_device == IntPtr.Zero || _physicalDevice == IntPtr.Zero)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+            Logger.Error(nameof(ImGuiVulkanRenderer),
                 "Vulkan device handles not yet captured — deferring init");
             return;
         }
@@ -372,11 +373,11 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         if (_queue == IntPtr.Zero)
         {
             _queue = presentQueue;
-            AndroidUtils.Warn(nameof(ImGuiVulkanRenderer),
+            Logger.Warn(nameof(ImGuiVulkanRenderer),
                 $"Using present queue as render queue: 0x{presentQueue:X}");
         }
 
-        AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+        Logger.Error(nameof(ImGuiVulkanRenderer),
             $"Initializing ImGui Vulkan backend... Device=0x{_device:X} " +
             $"PhysicalDevice=0x{_physicalDevice:X} Queue=0x{_queue:X} Family={_queueFamily}");
 
@@ -400,7 +401,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         // 创建命令池
         if (!CreateCommandPool())
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer), "Failed to create Vulkan command pool");
+            Logger.Error(nameof(ImGuiVulkanRenderer), "Failed to create Vulkan command pool");
             return;
         }
 
@@ -428,7 +429,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
 
         if (!ImGuiImplVulkan.Init(ref initInfo))
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer), "ImGui_ImplVulkan_Init failed");
+            Logger.Error(nameof(ImGuiVulkanRenderer), "ImGui_ImplVulkan_Init failed");
             return;
         }
 
@@ -440,12 +441,12 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         if (nativeWindow != IntPtr.Zero)
         {
             ImGuiImplAndroid.Init(nativeWindow);
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+            Logger.Error(nameof(ImGuiVulkanRenderer),
                 $"ImGui_ImplAndroid_Init success: 0x{nativeWindow:X}");
         }
 
         _initialized = true;
-        AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+        Logger.Error(nameof(ImGuiVulkanRenderer),
             "ImGui Vulkan backend initialized successfully");
     }
 
@@ -465,7 +466,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             int result = createPool(_device, (IntPtr)pCi, IntPtr.Zero, out _commandPool);
             if (result != 0)
             {
-                AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+                Logger.Error(nameof(ImGuiVulkanRenderer),
                     $"vkCreateCommandPool failed: {result}");
                 return false;
             }
@@ -484,12 +485,12 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             (IntPtr)Unsafe.AsPointer(ref allocInfo[0]), out _commandBuffer);
         if (allocResult != 0)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+            Logger.Error(nameof(ImGuiVulkanRenderer),
                 $"vkAllocateCommandBuffers failed: {allocResult}");
             return false;
         }
 
-        AndroidUtils.Info(nameof(ImGuiVulkanRenderer),
+        Logger.Info(nameof(ImGuiVulkanRenderer),
             $"Command pool & buffer created (pool=0x{_commandPool:X} buf=0x{_commandBuffer:X})");
         return true;
     }
@@ -516,7 +517,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             int br = begin(_commandBuffer, (IntPtr)pBi);
             if (br != 0)
             {
-                AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+                Logger.Error(nameof(ImGuiVulkanRenderer),
                     $"vkBeginCommandBuffer failed: {br}");
                 return;
             }
@@ -531,7 +532,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         int er = end(_commandBuffer);
         if (er != 0)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+            Logger.Error(nameof(ImGuiVulkanRenderer),
                 $"vkEndCommandBuffer failed: {er}");
             return;
         }
@@ -555,7 +556,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             (IntPtr)Unsafe.AsPointer(ref submitInfo[0]), _renderFence);
         if (sr != 0)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer),
+            Logger.Error(nameof(ImGuiVulkanRenderer),
                 $"vkQueueSubmit failed: {sr}");
         }
     }
@@ -604,7 +605,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             {
                 var range = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
                 io.Fonts.AddFontFromFileTTF(path, 16.0f, null, range);
-                AndroidUtils.Info(nameof(ImGuiVulkanRenderer), $"CJK font: {path}");
+                Logger.Info(nameof(ImGuiVulkanRenderer), $"CJK font: {path}");
                 loaded = true;
                 break;
             }
@@ -630,11 +631,11 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             io.Fonts.AddFontFromMemoryTTF(ptr, data.Length, 16.0f, IntPtr.Zero,
                 io.Fonts.GetGlyphRangesDefault());
             io.Fonts.Build();
-            AndroidUtils.Info(nameof(ImGuiVulkanRenderer), $"FA font loaded ({data.Length} bytes)");
+            Logger.Info(nameof(ImGuiVulkanRenderer), $"FA font loaded ({data.Length} bytes)");
         }
         catch (Exception ex)
         {
-            AndroidUtils.Error(nameof(ImGuiVulkanRenderer), $"FA font: {ex.Message}");
+            Logger.Error(nameof(ImGuiVulkanRenderer), $"FA font: {ex.Message}");
         }
     }
 

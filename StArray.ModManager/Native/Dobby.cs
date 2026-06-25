@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.PInvoke;
+namespace StArray.ModManager.Native;
 
 /// <summary>
 /// Dobby Hook P/Invoke 封装。

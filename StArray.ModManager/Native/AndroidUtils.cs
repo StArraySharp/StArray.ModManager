@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.PInvoke;
+namespace StArray.ModManager.Native;
 
 /// <summary>
 /// Android 工具 — 日志、Toast、Unity Surface（通过 JavaClass/JavaObject）

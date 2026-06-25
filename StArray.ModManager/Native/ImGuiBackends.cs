@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.PInvoke;
+namespace StArray.ModManager.Native;
 
 /// <summary>
 /// ImGui Android Backend (imgui_impl_android.cpp)

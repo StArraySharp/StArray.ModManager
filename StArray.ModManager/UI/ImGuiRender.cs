@@ -5,7 +5,7 @@ using ImGuiNET;
 using OpenTK.Graphics.Egl;
 using OpenTK.Graphics.ES30;
 using StArray.ModManager.Manager;
-using StArray.ModManager.PInvoke;
+using StArray.ModManager.Native;
 
 namespace StArray.ModManager.UI;
 
@@ -57,7 +57,7 @@ public static unsafe class ImGuiRender
         }
         catch (Exception ex)
         {
-            AndroidUtils.Error(nameof(ImGuiRender), $"OnSwapBuffers error: {ex}");
+            Logger.Error(nameof(ImGuiRender), $"OnSwapBuffers error: {ex}");
         }
         return _prevSwapBuffersDelegate!(display, surface);
     }
@@ -87,7 +87,7 @@ public static unsafe class ImGuiRender
             out var keyOrigin);
         _initializeKeyEvent = Marshal.GetDelegateForFunctionPointer<InitializeKeyEventDelegate>(keyOrigin);
         
-        AndroidUtils.Error(nameof(ImGuiRender), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
+        Logger.Error(nameof(ImGuiRender), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
         return true;
     }
 
@@ -112,17 +112,17 @@ public static unsafe class ImGuiRender
     {
         if (_initialized) return;
         GL.LoadBindings(new GLESBindingsContext());
-        AndroidUtils.Error(nameof(ImGuiRender), "Initializing ImGui with official backends...");
+        Logger.Error(nameof(ImGuiRender), "Initializing ImGui with official backends...");
         
         // 从 EGL surface 获取 ANativeWindow
         if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
             !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
         {
-            AndroidUtils.Error(nameof(ImGuiRender), "Failed to query EGL surface for initialization");
+            Logger.Error(nameof(ImGuiRender), "Failed to query EGL surface for initialization");
             return;
         }
         
-        AndroidUtils.Error(nameof(ImGuiRender), $"Surface size: {width}x{height}");
+        Logger.Error(nameof(ImGuiRender), $"Surface size: {width}x{height}");
         
         // 创建 ImGui 上下文
         ImGui.CreateContext();
@@ -144,7 +144,7 @@ public static unsafe class ImGuiRender
             {
                 var cjk = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
                 io.Fonts.AddFontFromFileTTF(path, 16.0f, null, cjk);
-                AndroidUtils.Info(nameof(ImGuiRender), $"CJK font: {path}");
+                Logger.Info(nameof(ImGuiRender), $"CJK font: {path}");
                 cjkLoaded = true;
                 break;
             }
@@ -166,14 +166,14 @@ public static unsafe class ImGuiRender
         if (nativeWindow != IntPtr.Zero)
         {
             ImGuiImplAndroid.Init(nativeWindow);
-            AndroidUtils.Error(nameof(ImGuiRender),
+            Logger.Error(nameof(ImGuiRender),
                 $"ImGui_ImplAndroid_Init success: 0x{nativeWindow:X}");
         }
 
         ImGuiImplOpenGL3.Init();
 
         _initialized = true;
-        AndroidUtils.Error(nameof(ImGuiRender), "ImGui initialized");
+        Logger.Error(nameof(ImGuiRender), "ImGui initialized");
     }
 
 
@@ -578,7 +578,7 @@ void main(){
         GC.KeepAlive(cbBind);
         GC.KeepAlive(cbUnbind);
 
-        AndroidUtils.Info(nameof(ImGuiRender), "Rainbow shader compiled");
+        Logger.Info(nameof(ImGuiRender), "Rainbow shader compiled");
     }
 
     static bool CheckCompile(int shader, string tag)
@@ -587,7 +587,7 @@ void main(){
         if (ok == 0)
         {
             string log = GL.GetShaderInfoLog(shader);
-            AndroidUtils.Error(nameof(ImGuiRender), $"Shader {tag}: {log}");
+            Logger.Error(nameof(ImGuiRender), $"Shader {tag}: {log}");
             return false;
         }
         return true;
@@ -599,7 +599,7 @@ void main(){
         if (ok == 0)
         {
             string log = GL.GetProgramInfoLog(prog);
-            AndroidUtils.Error(nameof(ImGuiRender), $"Link: {log}");
+            Logger.Error(nameof(ImGuiRender), $"Link: {log}");
             GL.DeleteProgram(prog);
             return false;
         }

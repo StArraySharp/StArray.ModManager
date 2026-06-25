@@ -1,6 +1,6 @@
+using StArray.ModManager.Resources;
 using System.Reflection;
 using StArray.ModManager.Manager;
-using StArray.ModManager.UI;
 
 namespace StArray.ModManager.Runtime;
 
@@ -11,9 +11,14 @@ public class ModLoader
     private readonly string _modsDirectory;
 
     public IReadOnlyList<ModEntry> Mods => _mods.AsReadOnly();
+    /// <summary>Mods 目录路径</summary>
+    public string ModsDirectory
+    {
+        get => _modsDirectory;
+        set => throw new NotSupportedException("ModsDirectory is set via constructor only");
+    }
 
     public event Action<ModEntry>? OnModStateChanged;
-    public event Action<string>? OnLogMessage;
 
     public ModLoader(string modsDirectory)
     {
@@ -35,7 +40,7 @@ public class ModLoader
         if (!Directory.Exists(_modsDirectory))
         {
             Directory.CreateDirectory(_modsDirectory);
-            Log($"已创建 Mods 目录: {_modsDirectory}");
+            Logger.Info(nameof(ModLoader), L10n.Get("Log_DirCreated", _modsDirectory));
             return;
         }
 
@@ -52,13 +57,12 @@ public class ModLoader
                     mod.LoadState = ModLoadState.Loaded;
                 }
                 _mods.Add(mod);
-                Log($"发现 Mod: {mod.Name} ({mod.Id})");
+                Logger.Info(nameof(ModLoader), L10n.Get("Log_ModFound", mod.Name, mod.Id));
             }
         }
 
-        // 按加载优先级排序
-        _mods.Sort((a, b) => a.LoadPriority.CompareTo(b.LoadPriority));
-        Log($"共发现 {_mods.Count} 个 Mod");
+        // 保持发现顺序
+        Logger.Info(nameof(ModLoader), L10n.Get("Log_ModCount", _mods.Count));
     }
 
     /// <summary>
@@ -95,7 +99,6 @@ public class ModLoader
                 Version = plugin.Version,
                 Author = plugin.Author,
                 Description = plugin.Description,
-                LoadPriority = plugin.LoadPriority,
                 Dependencies = plugin.Dependencies.ToList(),
                 FolderPath = folderPath,
                 EntryPoint = entryDll,
@@ -103,7 +106,7 @@ public class ModLoader
         }
         catch (Exception ex)
         {
-            Log($"无法读取 Mod 程序集 {dirName}: {ex.Message}", isError: true);
+            Logger.Error(nameof(ModLoader), L10n.Get("Log_ModAssemblyError", dirName, ex.Message));
             return null;
         }
     }
@@ -115,7 +118,7 @@ public class ModLoader
     {
         if (mod.LoadState == ModLoadState.Loaded)
         {
-            Log($"{mod.Name} 已经加载");
+            Logger.Info(nameof(ModLoader), $"{mod.Name} 已经加载");
             return true;
         }
 
@@ -131,11 +134,11 @@ public class ModLoader
                 var dep = _mods.FirstOrDefault(m => m.Id == depId);
                 if (dep == null)
                 {
-                    throw new Exception($"缺少依赖: {depId}");
+                    throw new Exception(L10n.Get("Log_MissingDep", depId));
                 }
                 if (dep.LoadState != ModLoadState.Loaded)
                 {
-                    Log($"  load dep: {dep.Name}");
+                    Logger.Info(nameof(ModLoader), $"  load dep: {dep.Name}");
                     LoadMod(dep);
                 }
             }
@@ -144,7 +147,7 @@ public class ModLoader
             if (!string.IsNullOrEmpty(mod.EntryPoint) && File.Exists(mod.EntryPoint))
             {
                 var assembly = Assembly.LoadFrom(mod.EntryPoint);
-                Log($"{mod.Name} 程序集已加载: {assembly.GetName().Name}");
+                Logger.Info(nameof(ModLoader), $"{mod.Name} 程序集已加载: {assembly.GetName().Name}");
 
 
                 var pluginType = assembly.GetTypes()
@@ -160,24 +163,24 @@ public class ModLoader
                     if (plugin is IModSettings s)
                         ModManagerUI.LoadSettings(mod, s);
 
-                    Log($"{mod.Name} 插件入口已执行");
+                    Logger.Info(nameof(ModLoader), $"{mod.Name} 插件入口已执行");
                 }
             }
             else
             {
 
-                Log($"{mod.Name} 无入口程序集，作为数据 Mod 加载");
+                Logger.Info(nameof(ModLoader), $"{mod.Name} 无入口程序集，作为数据 Mod 加载");
             }
 
             mod.IsEnabled = true;
             mod.LoadState = ModLoadState.Loaded;
-            Log($"{mod.Name} 加载成功");
+            Logger.Info(nameof(ModLoader), $"{mod.Name} 加载成功");
         }
         catch (Exception ex)
         {
             mod.LoadState = ModLoadState.Error;
             mod.LoadError = ex.Message;
-            Log($"{mod.Name} 加载失败: {ex.Message}", isError: true);
+            Logger.Error(nameof(ModLoader), $"{mod.Name} 加载失败: {ex.Message}");
         }
 
         OnModStateChanged?.Invoke(mod);
@@ -195,7 +198,7 @@ public class ModLoader
         mod.PluginInstance = null;
         mod.IsEnabled = false;
         mod.LoadState = ModLoadState.NotLoaded;
-        Log($"{mod.Name} 已卸载");
+        Logger.Info(nameof(ModLoader), $"{mod.Name} 已卸载");
         OnModStateChanged?.Invoke(mod);
     }
 
@@ -216,7 +219,7 @@ public class ModLoader
     public ModEntry AddMod(ModEntry mod)
     {
         _mods.Add(mod);
-        Log($"已添加 Mod: {mod.Name}");
+        Logger.Info(nameof(ModLoader), L10n.Get("Log_ModAdded", mod.Name));
         return mod;
     }
 
@@ -230,12 +233,8 @@ public class ModLoader
 
         var removed = _mods.Remove(mod);
         if (removed)
-            Log($"已移除 Mod: {mod.Name}");
+            Logger.Info(nameof(ModLoader), L10n.Get("Log_ModRemoved", mod.Name));
         return removed;
     }
 
-    private void Log(string message, bool isError = false)
-    {
-        OnLogMessage?.Invoke(isError ? $"[ERROR] {message}" : $"[INFO] {message}");
-    }
 }

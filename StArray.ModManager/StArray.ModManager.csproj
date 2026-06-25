@@ -8,8 +8,8 @@
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- CoreCLR embedded runtime config generation -->
-    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>embedded</DebugType>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>

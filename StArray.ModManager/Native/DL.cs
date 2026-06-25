@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.PInvoke;
+namespace StArray.ModManager.Native;
 
 public class DL
 {

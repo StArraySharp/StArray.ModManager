@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+    <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+        <xsd:element name="root" msdata:IsDataSet="true">
+        </xsd:element>
+    </xsd:schema>
+    <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+    <resheader name="version"><value>1.3</value></resheader>
+    <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+    <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+    <data name="MainWindow_Title" xml:space="preserve"><value>StArray ModManager</value></data>
+    <data name="Tab_ModList" xml:space="preserve"><value>Mod 列表</value></data>
+    <data name="Tab_Console" xml:space="preserve"><value>控制台</value></data>
+    <data name="Tab_Log" xml:space="preserve"><value>日志</value></data>
+    <data name="Tab_Settings" xml:space="preserve"><value>设置</value></data>
+    <data name="Btn_ScanMods" xml:space="preserve"><value>扫描 Mods</value></data>
+    <data name="Btn_AddMod" xml:space="preserve"><value>添加 Mod</value></data>
+    <data name="Btn_Clear" xml:space="preserve"><value>清空</value></data>
+    <data name="Btn_Confirm" xml:space="preserve"><value>确定</value></data>
+    <data name="Btn_Cancel" xml:space="preserve"><value>取消</value></data>
+    <data name="Col_State" xml:space="preserve"><value>状态</value></data>
+    <data name="Col_Name" xml:space="preserve"><value>名称</value></data>
+    <data name="Col_Version" xml:space="preserve"><value>版本</value></data>
+    <data name="Col_Settings" xml:space="preserve"><value>设置</value></data>
+    <data name="Status_ModCount" xml:space="preserve"><value>共 {0} 个 Mod | 已加载: {1}</value></data>
+    <data name="Status_LogCount" xml:space="preserve"><value>共 {0} 条</value></data>
+    <data name="State_Loaded" xml:space="preserve"><value>已加载</value></data>
+    <data name="State_Loading" xml:space="preserve"><value>加载中</value></data>
+    <data name="State_Error" xml:space="preserve"><value>错误</value></data>
+    <data name="State_NotLoaded" xml:space="preserve"><value>未加载</value></data>
+    <data name="Settings_ModsDir" xml:space="preserve"><value>Mods 目录:</value></data>
+    <data name="Settings_UiScale" xml:space="preserve"><value>界面缩放:</value></data>
+    <data name="Settings_Shortcuts" xml:space="preserve"><value>快捷键:</value></data>
+    <data name="Settings_Shortcut_Scan" xml:space="preserve"><value>Ctrl+R - 扫描 Mods</value></data>
+    <data name="Settings_ImGuiVersion" xml:space="preserve"><value>ImGui 版本:</value></data>
+    <data name="Settings_LoadedModCount" xml:space="preserve"><value>已加载 Mod 数:</value></data>
+    <data name="AddMod_Title" xml:space="preserve"><value>添加新 Mod</value></data>
+    <data name="AddMod_Name" xml:space="preserve"><value>名称:</value></data>
+    <data name="AddMod_Author" xml:space="preserve"><value>作者:</value></data>
+    <data name="AddMod_Description" xml:space="preserve"><value>描述:</value></data>
+    <data name="AddMod_DefaultName" xml:space="preserve"><value>新 Mod</value></data>
+    <data name="Mod.WindowTitle" xml:space="preserve"><value>{0} 设置</value></data>
+    <data name="Btn.Save" xml:space="preserve"><value>保存</value></data>
+    <data name="Toast.ModSaved" xml:space="preserve"><value>已保存: {0}</value></data>
+    <data name="Toast.SaveFailed" xml:space="preserve"><value>保存失败: {0}</value></data>
+    <data name="Btn_SaveSettings" xml:space="preserve"><value>保存设置</value></data>
+    <data name="Btn_Close" xml:space="preserve"><value>关闭</value></data>
+    <data name="Settings_GrabSize" xml:space="preserve"><value>滑动条宽度:</value></data>
+    <data name="Settings_ScrollSize" xml:space="preserve"><value>滚动条宽度:</value></data>
+    <data name="Toast_SettingsSaved" xml:space="preserve"><value>设置已保存</value></data>
+    <data name="AddMod_NotImplemented" xml:space="preserve"><value>未实现</value></data>
+    <data name="AddMod_NotImplDetail" xml:space="preserve"><value>该功能尚未开发。</value></data>
+    <data name="Inspector_DeserializeNull" xml:space="preserve"><value>反序列化失败：结果为 null</value></data>
+    <data name="Inspector_JsonError" xml:space="preserve"><value>JSON 错误: {0}</value></data>
+    <data name="Log_DirCreated" xml:space="preserve"><value>已创建 Mods 目录: {0}</value></data>
+    <data name="Log_ModFound" xml:space="preserve"><value>发现 Mod: {0} ({1})</value></data>
+    <data name="Log_ModCount" xml:space="preserve"><value>共发现 {0} 个 Mod</value></data>
+    <data name="Log_ModAssemblyError" xml:space="preserve"><value>无法读取 Mod 程序集 {0}: {1}</value></data>
+    <data name="Log_ModAlreadyLoaded" xml:space="preserve"><value>{0} 已经加载</value></data>
+    <data name="Log_MissingDep" xml:space="preserve"><value>缺少依赖: {0}</value></data>
+    <data name="Log_ModAssemblyLoaded" xml:space="preserve"><value>{0} 程序集已加载: {1}</value></data>
+    <data name="Log_ModEntryExecuted" xml:space="preserve"><value>{0} 插件入口已执行</value></data>
+    <data name="Log_ModNoEntry" xml:space="preserve"><value>{0} 无入口程序集，作为数据 Mod 加载</value></data>
+    <data name="Log_ModLoadSuccess" xml:space="preserve"><value>{0} 加载成功</value></data>
+    <data name="Log_ModLoadFailed" xml:space="preserve"><value>{0} 加载失败: {1}</value></data>
+    <data name="Log_ModUnloaded" xml:space="preserve"><value>{0} 已卸载</value></data>
+    <data name="Log_ModAdded" xml:space="preserve"><value>已添加 Mod: {0}</value></data>
+    <data name="Log_ModRemoved" xml:space="preserve"><value>已移除 Mod: {0}</value></data>
+    <data name="Log_AutoEnable" xml:space="preserve"><value>自动启用: {0}</value></data>
+    <data name="Log_SaveSettings" xml:space="preserve"><value>SaveSettings: {0}</value></data>
+    <data name="Log_LoadSettings" xml:space="preserve"><value>LoadSettings: {0}</value></data>
+</root>

@@ -20,9 +20,6 @@ public interface IModPlugin
     /// <summary>描述</summary>
     string Description { get; }
 
-    /// <summary>加载优先级（数字越小越先）</summary>
-    int LoadPriority { get; }
-
     /// <summary>依赖的其他 Mod ID</summary>
     IReadOnlyList<string> Dependencies { get; }
 

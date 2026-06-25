@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.PInvoke;
+namespace StArray.ModManager.Native;
 
 /// <summary>
 /// JNI Helper Native 函数绑定

@@ -48,6 +48,16 @@ public class ModSettingRangeAttribute : Attribute
 }
 
 /// <summary>
+/// 标记字段标签位置
+/// </summary>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+public class ModSettingLabelSideAttribute : Attribute
+{
+    public ModInspector.LabelSide Side { get; }
+    public ModSettingLabelSideAttribute(ModInspector.LabelSide side) => Side = side;
+}
+
+/// <summary>
 /// 标记 string 字段为 JSON 内容，检查器使用多行编辑器
 /// </summary>
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
