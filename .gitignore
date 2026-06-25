@@ -53,6 +53,7 @@ TestAndroidProject2/
 **/src/main/assets/*.pdb
 **/src/main/assets/*.json
 **/src/main/assets/*.bin
+**/src/main/assets/runtime
 
 # Logs
 *.log

@@ -1,5 +1,5 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using StArray.ModManager.Java;
 using StArray.ModManager.PInvoke;
 
 namespace StArray.ModManager.Manager;
@@ -14,7 +14,7 @@ public static class MotionEventHook
     private static IntPtr _originalFunc31 = IntPtr.Zero;
     private static IntPtr _originalFunc35 = IntPtr.Zero;
     private static IntPtr _originalInitMotion = IntPtr.Zero;
-    private static bool _isHooked = false;
+    private static bool _isHooked;
 
     private const string TAG = "MotionEventHook";
 
@@ -35,7 +35,7 @@ public static class MotionEventHook
     {
         if (_isHooked)
         {
-            AndroidLog.Warn("MotionEventHook", "Already hooked");
+            AndroidUtils.Warn("MotionEventHook", "Already hooked");
             return false;
         }
 
@@ -44,7 +44,7 @@ public static class MotionEventHook
         try
         {
             int apiLevel = GetApiLevel();
-            AndroidLog.Info(TAG, $"API Level: {apiLevel}");
+            AndroidUtils.Info(TAG, $"API Level: {apiLevel}");
 
             // 优先尝试hook InputConsumer::initializeMotionEvent（更可靠）
             string consumerSymbol = "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE";
@@ -52,7 +52,7 @@ public static class MotionEventHook
             
             if (consumerAddr != IntPtr.Zero)
             {
-                AndroidLog.Info(TAG, $"Found InputConsumer::initializeMotionEvent at 0x{consumerAddr:X}");
+                AndroidUtils.Info(TAG, $"Found InputConsumer::initializeMotionEvent at 0x{consumerAddr:X}");
                 
                 unsafe
                 {
@@ -62,18 +62,16 @@ public static class MotionEventHook
                     if (result == 0)
                     {
                         _isHooked = true;
-                        AndroidLog.Info(TAG, $"Hooked InputConsumer::initializeMotionEvent successfully");
+                        AndroidUtils.Info(TAG, "Hooked InputConsumer::initializeMotionEvent successfully");
                         return true;
                     }
-                    else
-                    {
-                        AndroidLog.Error(TAG, $"Failed to hook InputConsumer, code: {result}");
-                    }
+
+                    AndroidUtils.Error(TAG, $"Failed to hook InputConsumer, code: {result}");
                 }
             }
             else
             {
-                AndroidLog.Warn(TAG, "InputConsumer::initializeMotionEvent not found, trying InputPublisher");
+                AndroidUtils.Warn(TAG, "InputConsumer::initializeMotionEvent not found, trying InputPublisher");
             }
 
             // 回退到InputPublisher方案
@@ -97,14 +95,14 @@ public static class MotionEventHook
                     funcAddress = Dobby.SymbolResolver("libinput.so", symbol);
                     if (funcAddress != IntPtr.Zero)
                     {
-                        AndroidLog.Info("MotionEventHook", $"Found symbol for API 35+");
+                        AndroidUtils.Info("MotionEventHook", "Found symbol for API 35+");
                         break;
                     }
                 }
                 
                 if (funcAddress == IntPtr.Zero)
                 {
-                    AndroidLog.Error("MotionEventHook", $"Symbol not found for API {apiLevel}. Tried {symbols.Length} variants.");
+                    AndroidUtils.Error("MotionEventHook", $"Symbol not found for API {apiLevel}. Tried {symbols.Length} variants.");
                     return false;
                 }
 
@@ -115,13 +113,13 @@ public static class MotionEventHook
                 
                     if (result != 0)
                     {
-                        AndroidLog.Error("MotionEventHook", $"DobbyHook failed with code: {result}");
+                        AndroidUtils.Error("MotionEventHook", $"DobbyHook failed with code: {result}");
                         return false;
                     }
                 }
                 
                 _isHooked = true;
-                AndroidLog.Info("MotionEventHook", $"Hooked API 35+ at 0x{funcAddress:X}");
+                AndroidUtils.Info("MotionEventHook", $"Hooked API 35+ at 0x{funcAddress:X}");
             }
             else if (apiLevel >= 31)
             {
@@ -133,11 +131,11 @@ public static class MotionEventHook
                 
                 if (funcAddress == IntPtr.Zero)
                 {
-                    AndroidLog.Error("MotionEventHook", $"Symbol not found for API 31-34");
+                    AndroidUtils.Error("MotionEventHook", "Symbol not found for API 31-34");
                     return false;
                 }
 
-                AndroidLog.Info("MotionEventHook", $"Found symbol at 0x{funcAddress:X}, attempting hook...");
+                AndroidUtils.Info("MotionEventHook", $"Found symbol at 0x{funcAddress:X}, attempting hook...");
 
                 unsafe
                 {
@@ -146,14 +144,14 @@ public static class MotionEventHook
                 
                     if (result != 0)
                     {
-                        AndroidLog.Error("MotionEventHook", $"DobbyHook failed with code: {result}");
+                        AndroidUtils.Error("MotionEventHook", $"DobbyHook failed with code: {result}");
                         return false;
                     }
                 }
                 
                 _isHooked = true;
-                AndroidLog.Info("MotionEventHook", $"Hooked API 31-34 at 0x{funcAddress:X}");
-                AndroidLog.Info("MotionEventHook", $"Original function saved at 0x{_originalFunc31:X}");
+                AndroidUtils.Info("MotionEventHook", $"Hooked API 31-34 at 0x{funcAddress:X}");
+                AndroidUtils.Info("MotionEventHook", $"Original function saved at 0x{_originalFunc31:X}");
             }
             else if (apiLevel >= 30)
             {
@@ -176,15 +174,15 @@ public static class MotionEventHook
                     funcAddress = Dobby.SymbolResolver("libinput.so", symbol);
                     if (funcAddress != IntPtr.Zero)
                     {
-                        AndroidLog.Info("MotionEventHook", $"Found symbol for API 30-34");
+                        AndroidUtils.Info("MotionEventHook", "Found symbol for API 30-34");
                         break;
                     }
                 }
                 
                 if (funcAddress == IntPtr.Zero)
                 {
-                    AndroidLog.Error("MotionEventHook", $"Symbol not found for API {apiLevel}. Tried {symbols.Length} variants.");
-                    AndroidLog.Error("MotionEventHook", "You may need to check the actual symbol in libinput.so using 'readelf -Ws /system/lib64/libinput.so | grep publishMotion'");
+                    AndroidUtils.Error("MotionEventHook", $"Symbol not found for API {apiLevel}. Tried {symbols.Length} variants.");
+                    AndroidUtils.Error("MotionEventHook", "You may need to check the actual symbol in libinput.so using 'readelf -Ws /system/lib64/libinput.so | grep publishMotion'");
                     return false;
                 }
 
@@ -195,17 +193,17 @@ public static class MotionEventHook
                 
                     if (result != 0)
                     {
-                        AndroidLog.Error("MotionEventHook", $"DobbyHook failed with code: {result}");
+                        AndroidUtils.Error("MotionEventHook", $"DobbyHook failed with code: {result}");
                         return false;
                     }
                 }
                 
                 _isHooked = true;
-                AndroidLog.Info("MotionEventHook", $"Hooked API 30-34 at 0x{funcAddress:X}");
+                AndroidUtils.Info("MotionEventHook", $"Hooked API 30-34 at 0x{funcAddress:X}");
             }
             else
             {
-                AndroidLog.Error("MotionEventHook", $"API {apiLevel} not supported (requires API 30+)");
+                AndroidUtils.Error("MotionEventHook", $"API {apiLevel} not supported (requires API 30+)");
                 return false;
             }
 
@@ -213,7 +211,7 @@ public static class MotionEventHook
         }
         catch (Exception ex)
         {
-            AndroidLog.Error("MotionEventHook", $"Error: {ex}");
+            AndroidUtils.Error("MotionEventHook", $"Error: {ex}");
             return false;
         }
     }
@@ -253,11 +251,11 @@ public static class MotionEventHook
 
             _isHooked = false;
             _callback = null;
-            AndroidLog.Info("MotionEventHook", "Hook stopped");
+            AndroidUtils.Info("MotionEventHook", "Hook stopped");
         }
         catch (Exception ex)
         {
-            AndroidLog.Error("MotionEventHook", $"Error stopping hook: {ex}");
+            AndroidUtils.Error("MotionEventHook", $"Error stopping hook: {ex}");
         }
     }
 
@@ -266,7 +264,7 @@ public static class MotionEventHook
     /// </summary>
     public static void DebugFindSymbols()
     {
-        AndroidLog.Info("MotionEventHook", "=== Searching for publishMotionEvent symbols ===");
+        AndroidUtils.Info("MotionEventHook", "=== Searching for publishMotionEvent symbols ===");
         
         // 所有已知的符号变体
         var allSymbols = new[]
@@ -290,23 +288,23 @@ public static class MotionEventHook
             IntPtr addr = Dobby.SymbolResolver("libinput.so", symbol);
             if (addr != IntPtr.Zero)
             {
-                AndroidLog.Info("MotionEventHook", $"✓ FOUND {name}: 0x{addr:X}");
+                AndroidUtils.Info("MotionEventHook", $"✓ FOUND {name}: 0x{addr:X}");
                 foundCount++;
             }
             else
             {
-                AndroidLog.Debug("MotionEventHook", $"✗ Not found: {name}");
+                AndroidUtils.Debug("MotionEventHook", $"✗ Not found: {name}");
             }
         }
 
-        AndroidLog.Info("MotionEventHook", $"=== Found {foundCount}/{allSymbols.Length} symbols ===");
+        AndroidUtils.Info("MotionEventHook", $"=== Found {foundCount}/{allSymbols.Length} symbols ===");
         
         if (foundCount == 0)
         {
-            AndroidLog.Warn("MotionEventHook", "No symbols found! Possible reasons:");
-            AndroidLog.Warn("MotionEventHook", "1. libinput.so path might be different on this device");
-            AndroidLog.Warn("MotionEventHook", "2. Symbol name mangling differs from AOSP");
-            AndroidLog.Warn("MotionEventHook", "3. Need to check actual library: /system/lib64/libinput.so or /system/lib/libinput.so");
+            AndroidUtils.Warn("MotionEventHook", "No symbols found! Possible reasons:");
+            AndroidUtils.Warn("MotionEventHook", "1. libinput.so path might be different on this device");
+            AndroidUtils.Warn("MotionEventHook", "2. Symbol name mangling differs from AOSP");
+            AndroidUtils.Warn("MotionEventHook", "3. Need to check actual library: /system/lib64/libinput.so or /system/lib/libinput.so");
         }
     }
 
@@ -338,7 +336,7 @@ public static class MotionEventHook
         }
         catch (Exception ex)
         {
-            AndroidLog.Error("MotionEventHook", $"Callback error: {ex}");
+            AndroidUtils.Error("MotionEventHook", $"Callback error: {ex}");
         }
 
         // 调用原始函数
@@ -391,7 +389,7 @@ public static class MotionEventHook
         }
         catch (Exception ex)
         {
-            AndroidLog.Error("MotionEventHook", $"Callback error: {ex}");
+            AndroidUtils.Error("MotionEventHook", $"Callback error: {ex}");
         }
 
         // 调用原始函数
@@ -410,10 +408,10 @@ public static class MotionEventHook
     /// <summary>
     /// Hook函数 - InputConsumer::initializeMotionEvent (通用方案)
     /// </summary>
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static int InitializeMotionEvent(IntPtr consumer, IntPtr motionEvent, IntPtr inputMessage)
     {
-        AndroidLog.Debug(TAG, $"InitializeMotionEvent called: motionEvent=0x{motionEvent:X}");
+        AndroidUtils.Debug(TAG, $"InitializeMotionEvent called: motionEvent=0x{motionEvent:X}");
         
         try
         {
@@ -458,7 +456,7 @@ public static class MotionEventHook
                                 if (testAction >= 0 && testAction <= 10)
                                 {
                                     // 可能是action
-                                    AndroidLog.Debug(TAG, $"Found potential action={testAction} at offset {offset}");
+                                    AndroidUtils.Debug(TAG, $"Found potential action={testAction} at offset {offset}");
                                 }
                             }
                         }
@@ -470,7 +468,7 @@ public static class MotionEventHook
         }
         catch (Exception ex)
         {
-            AndroidLog.Error(TAG, $"InitializeMotionEvent error: {ex}");
+            AndroidUtils.Error(TAG, $"InitializeMotionEvent error: {ex}");
         }
 
         // 调用原始函数
@@ -486,7 +484,7 @@ public static class MotionEventHook
     /// <summary>
     /// Hook函数 - API 31-34 (Android 12-14, 没有rawTransform, cursor是int)
     /// </summary>
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static int PublishMotionEvent_API31(
         IntPtr thiz, uint seq, int eventId, int deviceId, int source, int displayId,
         IntPtr hmac, // std::array<uint8_t, 32>
@@ -500,7 +498,7 @@ public static class MotionEventHook
         IntPtr pointerProperties, // const PointerProperties*
         IntPtr pointerCoords) // const PointerCoords*
     {
-        AndroidLog.Debug("MotionEventHook", $"API31 Hook called: action={action}, pointers={pointerCount}, source=0x{source:X}");
+        AndroidUtils.Debug("MotionEventHook", $"API31 Hook called: action={action}, pointers={pointerCount}, source=0x{source:X}");
         
         try
         {
@@ -518,14 +516,14 @@ public static class MotionEventHook
                     }
                     else
                     {
-                        AndroidLog.Warn("MotionEventHook", "PointerCoords is null");
+                        AndroidUtils.Warn("MotionEventHook", "PointerCoords is null");
                     }
                 }
             }
         }
         catch (Exception ex)
         {
-            AndroidLog.Error("MotionEventHook", $"Callback error: {ex}");
+            AndroidUtils.Error("MotionEventHook", $"Callback error: {ex}");
         }
 
         // 调用原始函数

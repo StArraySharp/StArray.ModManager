@@ -1,3 +1,8 @@
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+
 plugins {
     id 'com.android.library'
 }
@@ -62,3 +67,71 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
 }
+
+tasks.register("downloadRuntime"){
+    description = '下载并解压 ZIP 文件到指定目录，如果已存在则跳过'
+    group = 'build'
+
+    // ========== 可配置参数 ==========
+    def expectedSha256 = "2c40baffab79a89c4ac967407f704fe3e2cc7835cbc86f4fb4d59cd5fc8e1a3b";
+    def zipUrl = 'https://github.com/StArraySharp/StArray.ModManager/releases/download/0/dotnet10_core_references.zip'          // ZIP 下载地址
+    def destDir = file("$projectDir/src/main/assets/runtime")            // 解压目标目录
+    def zipFile = file("$buildDir/cache/file.zip")       // 本地缓存 ZIP 路径
+    // =================================
+
+    onlyIf {
+        !destDir.exists()
+    }
+
+    doLast {
+        zipFile.parentFile.mkdirs()
+
+        new URL(zipUrl).withInputStream { inputStream ->
+            zipFile.withOutputStream { outputStream ->
+                outputStream << inputStream
+            }
+        }
+        // 2. 计算 SHA256 哈希值
+        MessageDigest digest = MessageDigest.getInstance("SHA-256")
+        zipFile.withInputStream { fis ->
+            byte[] buffer = new byte[8192]
+            int read
+            while ((read = fis.read(buffer)) != -1) {
+                digest.update(buffer, 0, read)
+            }
+        }
+        byte[] hashBytes = digest.digest()
+        String calculatedSha256 = hashBytes.collect { String.format("%02x", it) }.join()
+
+        // 3. 校验哈希值
+        if (!calculatedSha256.equalsIgnoreCase(expectedSha256)) {
+            Files.delete(zipFile.toPath())
+            throw new GradleException(
+                    "SHA256 校验失败\n" +
+                            "预期: ${expectedSha256}\n" +
+                            "实际: ${calculatedSha256}\n" +
+                            "请检查网络或手动下载文件。"
+            )
+        }
+        destDir.mkdirs()
+        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
+            ZipEntry entry
+            while ((entry = zis.getNextEntry()) != null) {
+                String entryName = entry.name
+                if (entryName.isEmpty()) continue
+                def targetFile = new File(destDir, entryName)
+                if (entry.isDirectory()) {
+                    targetFile.mkdirs()
+                } else {
+                    targetFile.parentFile.mkdirs()
+                    targetFile.withOutputStream { out ->
+                        out << zis
+                    }
+                }
+                zis.closeEntry()
+            }
+        }
+        zipFile.delete()
+    }
+}
+preBuild.dependsOn downloadRuntime

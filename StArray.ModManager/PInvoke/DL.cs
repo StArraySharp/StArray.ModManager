@@ -11,7 +11,7 @@ public class DL
     public static extern IntPtr dlsym(IntPtr handle, string symbol);
 
     [Flags]
-    public enum Flags : int
+    public enum Flags
     {
         RTLD_LAZY = 1,
         RTLD_NOW = 2,

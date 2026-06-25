@@ -3,19 +3,13 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
 using OpenTK.Graphics.Egl;
-using StArray.ModManager.Java;
 using StArray.ModManager.PInvoke;
 
 namespace StArray.ModManager.UI;
 
-/// <summary>
-/// ImGui EGL 渲染器 —— 负责 SwapBuffers Hook、ImGui 初始化与渲染管线
-/// 输入处理委托给 <see cref="ImGuiInputHandler"/>
-/// </summary>
+/// <summary>ImGui EGL renderer / EGL 渲染器 — SwapBuffers hook, init, render pipeline</summary>
 public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
 {
-    // ===== 静态单例（兼容原生宿主通过反射调用静态 Install） =====
-
     private static ImGuiEGLRenderer? s_instance;
 
     /// <summary> 获取渲染器单例（Install 之后可用） </summary>
@@ -45,8 +39,6 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
                 s_pendingOnRender -= value;
         }
     }
-
-    // ===== 实例成员 =====
 
     private bool _initialized;
     private Action _onRender = () => { };
@@ -89,7 +81,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             s_pendingOnRender = null;
         }
 
-        AndroidLog.Error(nameof(ImGuiEGLRenderer), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
+        AndroidUtils.Error(nameof(ImGuiEGLRenderer), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
         return true;
     }
 
@@ -120,21 +112,21 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             ImGuiImplOpenGL3.NewFrame();
             ImGuiImplAndroid.NewFrame();
 
-            var io = ImGuiNET.ImGui.GetIO();
+            var io = ImGui.GetIO();
             io.DisplaySize = new Vector2(width, height);
 
-            ImGuiNET.ImGui.NewFrame();
+            ImGui.NewFrame();
 
             // 构建 UI
             self.BuildUI();
             ImGuiInputHandler.UpdateIme();
             // 渲染
-            ImGuiNET.ImGui.Render();
-            ImGuiImplOpenGL3.RenderDrawData((IntPtr)ImGuiNET.ImGui.GetDrawData().NativePtr);
+            ImGui.Render();
+            ImGuiImplOpenGL3.RenderDrawData((IntPtr)ImGui.GetDrawData().NativePtr);
         }
         catch (Exception ex)
         {
-            AndroidLog.Error(nameof(ImGuiEGLRenderer), $"OnSwapBuffers error: {ex}");
+            AndroidUtils.Error(nameof(ImGuiEGLRenderer), $"OnSwapBuffers error: {ex}");
         }
 
         return self._prevSwapBuffersDelegate!(display, surface);
@@ -144,22 +136,22 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
     {
         if (_initialized) return;
 
-        AndroidLog.Error(nameof(ImGuiEGLRenderer), "Initializing ImGui with official backends...");
+        AndroidUtils.Error(nameof(ImGuiEGLRenderer), "Initializing ImGui with official backends...");
 
         // 从 EGL surface 获取 ANativeWindow
         if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
             !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
         {
-            AndroidLog.Error(nameof(ImGuiEGLRenderer), "Failed to query EGL surface for initialization");
+            AndroidUtils.Error(nameof(ImGuiEGLRenderer), "Failed to query EGL surface for initialization");
             return;
         }
 
-        AndroidLog.Error(nameof(ImGuiEGLRenderer), $"Surface size: {width}x{height}");
+        AndroidUtils.Error(nameof(ImGuiEGLRenderer), $"Surface size: {width}x{height}");
 
         // 创建 ImGui 上下文
-        ImGuiNET.ImGui.CreateContext();
+        ImGui.CreateContext();
 
-        var io = ImGuiNET.ImGui.GetIO();
+        var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
 
         // 设置缩放
@@ -172,11 +164,11 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         bool cjkLoaded = false;
         foreach (var path in cjkPaths)
         {
-            if (System.IO.File.Exists(path))
+            if (File.Exists(path))
             {
                 var cjk = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
                 io.Fonts.AddFontFromFileTTF(path, 16.0f, null, cjk);
-                AndroidLog.Info(nameof(ImGuiEGLRenderer), $"CJK font: {path}");
+                AndroidUtils.Info(nameof(ImGuiEGLRenderer), $"CJK font: {path}");
                 cjkLoaded = true;
                 break;
             }
@@ -188,31 +180,31 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         LoadFontAwesome(io);
 
         // 设置样式
-        var style = ImGuiNET.ImGui.GetStyle();
+        var style = ImGui.GetStyle();
         style.ScaleAllSizes(2.0f);
-        ImGuiNET.ImGui.StyleColorsClassic();
+        ImGui.StyleColorsClassic();
 
         // 初始化官方 backends
-        var nativeWindow = Unity.UnitySurfaceHelper.GetUnityNativeWindow();
+        var nativeWindow = AndroidUtils.GetUnityNativeWindow();
         if (nativeWindow != IntPtr.Zero)
         {
             ImGuiImplAndroid.Init(nativeWindow);
-            AndroidLog.Error(nameof(ImGuiEGLRenderer),
+            AndroidUtils.Error(nameof(ImGuiEGLRenderer),
                 $"ImGui_ImplAndroid_Init success with window: 0x{nativeWindow:X}");
         }
         else
         {
-            AndroidLog.Error(nameof(ImGuiEGLRenderer),
+            AndroidUtils.Error(nameof(ImGuiEGLRenderer),
                 "Failed to get Unity ANativeWindow, touch input may not work");
         }
 
         ImGuiImplOpenGL3.Init();
 
-        AndroidLog.Error(nameof(ImGuiEGLRenderer),
+        AndroidUtils.Error(nameof(ImGuiEGLRenderer),
             "Touch input handled via ImGui_ImplAndroid");
 
         _initialized = true;
-        AndroidLog.Error(nameof(ImGuiEGLRenderer),
+        AndroidUtils.Error(nameof(ImGuiEGLRenderer),
             "ImGui initialized with official OpenGL3 + Android input backends");
     }
 
@@ -243,20 +235,18 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             cfg->MergeMode = 1;
 
             // FontAwesome 7 图标范围（私用区）
-            ushort[] iconRange = [(ushort)0xe005, (ushort)0xf8ff, 0];
+            ushort[] iconRange = [0xe005, 0xf8ff, 0];
 
             fixed (ushort* r = iconRange)
                 io.Fonts.AddFontFromMemoryTTF(ptr, ttf.Length, 16f, cfg, (IntPtr)r);
 
             io.Fonts.Build();
-            AndroidLog.Info(nameof(ImGuiEGLRenderer),
+            AndroidUtils.Info(nameof(ImGuiEGLRenderer),
                 $"FontAwesome merged ({ttf.Length} bytes)");
         }
         catch { /* 找不到资源则静默跳过 */ }
     }
 }
-
-// ===== 静态外观（原生宿主兼容层） =====
 
 /// <summary>
 /// ImGuiEGLRender 静态外观 —— 为原生宿主提供与旧版 API 兼容的入口

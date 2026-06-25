@@ -1,28 +1,29 @@
 using System.Numerics;
+using System.Reflection;
+using System.Text.Json;
 using IconFonts;
 using ImGuiNET;
-using StArray.ModManager.Inspector;
+using StArray.ModManager.PInvoke;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
 
 namespace StArray.ModManager.UI;
 
-/// <summary>
-/// Mod 管理器 UI —— 所有 ImGui 界面逻辑在此，与 ImGuiController 分离
-/// </summary>
+/// <summary>Mod 管理器 UI / Mod manager main UI — all ImGui interface logic</summary>
 public class ModManagerUI
 {
     private readonly ModLoader _modManager;
     private readonly List<string> _logMessages = new();
     private ModEntry? _selectedMod;
-    private string _newModName = string.Empty;
-    private string _newModAuthor = string.Empty;
-    private string _newModDescription = string.Empty;
     private string _modsDirectory = string.Empty;
 
     private bool _showAddModPopup;
     private bool _showMainWindow = true;
     private string? _expandedModId;
+
+    // 通知
+    private string _toastMessage = string.Empty;
+    private float _toastTimer;
 
     public ModManagerUI(ModLoader modManager)
     {
@@ -33,7 +34,7 @@ public class ModManagerUI
     private void OnLogMessage(string message)
     {
         _logMessages.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
-        // 限制日志数量
+
         while (_logMessages.Count > 500)
             _logMessages.RemoveAt(0);
     }
@@ -46,6 +47,7 @@ public class ModManagerUI
         RenderMainWindow();
         RenderModSettingsWindow();
         RenderAddModPopup();
+        RenderToast();
     }
 
     private void RenderMainWindow()
@@ -58,10 +60,10 @@ public class ModManagerUI
             ImGui.PushTextWrapPos();
             if (ImGui.BeginTabBar("MainTabs"))
             {
-                // === Mod 列表 Tab ===
+
                 if (ImGui.BeginTabItem("Mod 列表"))
                 {
-                    // 工具栏
+
                     if (ImGui.Button($"{FontAwesome7.MagnifyingGlass} 扫描 Mods"))
                         _modManager.ScanMods();
                     ImGui.SameLine();
@@ -70,7 +72,7 @@ public class ModManagerUI
 
                     ImGui.Separator();
 
-                    // Mod 列表表格
+
                     if (ImGui.BeginTable("ModTable", 4,
                         ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg |
                         ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY))
@@ -124,7 +126,7 @@ public class ModManagerUI
                     ImGui.EndTabItem();
                 }
 
-                // === 控制台 Tab ===
+
                 if (ImGui.BeginTabItem("控制台"))
                 {
                     if (ImGui.BeginTabBar("ConsoleTabs"))
@@ -158,6 +160,26 @@ public class ModManagerUI
                             var dir = _modsDirectory;
                             ImGui.InputText("##modsDir", ref dir, 500);
                             if (dir != _modsDirectory) _modsDirectory = dir;
+                            ImGui.Separator();
+
+
+                            ImGui.Text("界面缩放:");
+                            float uiscale = ImGui.GetIO().FontGlobalScale;
+                            if (ImGui.SliderFloat("##uiscale", ref uiscale, 1f, 5f, "%.1f"))
+                                ImGui.GetIO().FontGlobalScale = uiscale;
+
+
+                            var style = ImGui.GetStyle();
+                            ImGui.Text("滑动条宽度:");
+                            float grab = style.GrabMinSize;
+                            if (ImGui.SliderFloat("##grab", ref grab, 5f, 60f, "%.0f"))
+                                style.GrabMinSize = grab;
+
+                            float scrollW = style.ScrollbarSize;
+                            ImGui.Text("滚动条宽度:");
+                            if (ImGui.SliderFloat("##scroll", ref scrollW, 10f, 60f, "%.0f"))
+                                style.ScrollbarSize = scrollW;
+
                             ImGui.Separator();
                             ImGui.Text("快捷键:");
                             ImGui.BulletText("Ctrl+R - 扫描 Mods");
@@ -225,16 +247,90 @@ public class ModManagerUI
 
         var open = true;
         var title = $"{mod.Name} 设置###ModSettings_{mod.Id}";
-        ImGui.SetNextWindowSize(new Vector2(350, 250), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(350, 280), ImGuiCond.FirstUseEver);
 
         if (ImGui.Begin(title, ref open))
         {
             settings.OnGui();
+
+            ImGui.Spacing();
+            ImGui.Separator();
+
+            if (ImGui.Button($"{FontAwesome7.FloppyDisk} 保存", new Vector2(100, 0)))
+            {
+                SaveSettings(mod, settings);
+            }
         }
         ImGui.End();
 
         if (!open)
             _expandedModId = null;
+    }
+
+    /// <summary>序列化设置对象到 {mod.FolderPath}/settings.json</summary>
+    public void SaveSettings(ModEntry mod, IModSettings settings)
+    {
+        try
+        {
+            var path = Path.Combine(mod.FolderPath, "settings.json");
+            var json = JsonSerializer.Serialize(settings, settings.GetType(),
+                new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json);
+            _toastMessage = $"{FontAwesome7.CircleCheck} 已保存 {mod.Name} 设置";
+            _toastTimer = 2.5f;
+        }
+        catch (Exception ex)
+        {
+            _toastMessage = $"{FontAwesome7.CircleXmark} 保存失败: {ex.Message}";
+            _toastTimer = 3f;
+            AndroidUtils.Error(nameof(ModManagerUI), $"SaveSettings: {ex.Message}");
+        }
+    }
+
+    /// <summary>从 {mod.FolderPath}/settings.json 反序列化到设置对象</summary>
+    public static void LoadSettings(ModEntry mod, IModSettings settings)
+    {
+        try
+        {
+            var path = Path.Combine(mod.FolderPath, "settings.json");
+            if (!File.Exists(path)) return;
+
+            var json = File.ReadAllText(path);
+            var populated = JsonSerializer.Deserialize(json, settings.GetType());
+            if (populated == null) return;
+
+        
+            foreach (var f in settings.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                f.SetValue(settings, f.GetValue(populated));
+        }
+        catch (Exception ex)
+        {
+            AndroidUtils.Error(nameof(ModManagerUI), $"LoadSettings: {ex.Message}");
+        }
+    }
+
+    private void RenderToast()
+    {
+        if (_toastTimer <= 0) return;
+
+        _toastTimer -= ImGui.GetIO().DeltaTime;
+
+        float alpha = Math.Min(_toastTimer / 0.5f, 1f);
+        ImGui.PushStyleVar(ImGuiStyleVar.Alpha, alpha);
+
+        var vp = ImGui.GetMainViewport();
+        ImGui.SetNextWindowPos(vp.Pos + new Vector2(vp.Size.X - 320, vp.Size.Y - 60),
+            ImGuiCond.Always, new Vector2(1, 1));
+        ImGui.SetNextWindowSize(new Vector2(300, 0));
+
+        if (ImGui.Begin("##toast", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoInputs |
+            ImGuiWindowFlags.NoNav | ImGuiWindowFlags.AlwaysAutoResize |
+            ImGuiWindowFlags.NoFocusOnAppearing))
+        {
+            ImGui.Text(_toastMessage);
+        }
+        ImGui.End();
+        ImGui.PopStyleVar();
     }
 
     private void RenderAddModPopup()
@@ -249,43 +345,13 @@ public class ModManagerUI
         if (ImGui.BeginPopupModal("添加新 Mod", ref _showAddModPopup,
             ImGuiWindowFlags.AlwaysAutoResize))
         {
-            ImGui.Text("名称:");
-            ImGui.InputText("##newName", ref _newModName, 100);
-
-            ImGui.Text("作者:");
-            ImGui.InputText("##newAuthor", ref _newModAuthor, 100);
-
-            ImGui.Text("描述:");
-            ImGui.InputTextMultiline("##newDesc", ref _newModDescription, 500,
-                new Vector2(300, 80));
+            ImGui.TextColored(new Vector4(1f, 0.6f, 0.2f, 1f), FontAwesome7.Wrench + " 未实现");
+            ImGui.Spacing();
+            ImGui.Text("该功能尚未开发。");
 
             ImGui.Spacing();
-
-            if (ImGui.Button("确定", new Vector2(100, 0)))
-            {
-                var mod = new ModEntry
-                {
-                    Id = Guid.NewGuid().ToString("N")[..8],
-                    Name = string.IsNullOrWhiteSpace(_newModName) ? "新 Mod" : _newModName,
-                    Author = _newModAuthor,
-                    Description = _newModDescription,
-                    IsEnabled = false,
-                    LoadPriority = _modManager.Mods.Count
-                };
-                _modManager.AddMod(mod);
-
-                // 重置
-                _newModName = string.Empty;
-                _newModAuthor = string.Empty;
-                _newModDescription = string.Empty;
+            if (ImGui.Button("关闭", new Vector2(100, 0)))
                 _showAddModPopup = false;
-            }
-
-            ImGui.SameLine();
-            if (ImGui.Button("取消", new Vector2(100, 0)))
-            {
-                _showAddModPopup = false;
-            }
 
             ImGui.EndPopup();
         }

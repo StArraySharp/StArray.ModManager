@@ -28,12 +28,12 @@ public class ModManagerUtils {
     private static EditText sHiddenEditText;
     private static boolean sEditTextAdded;
 
-    private static Activity getUnityActivity() {
+    public static Activity getUnityActivity() {
         try {
             Class<?> clazz = Class.forName("com.unity3d.player.UnityPlayer");
             return (Activity) clazz.getField("currentActivity").get(null);
         } catch (Exception e) {
-            android.util.Log.e("ModManagerUtils", "getUnityActivity", e);
+            Log.e("ModManagerUtils", "getUnityActivity", e);
         }
         return null;
     }
@@ -102,11 +102,9 @@ public class ModManagerUtils {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             public void onTextChanged(CharSequence s, int start, int before, int count) {}
             public void afterTextChanged(Editable s) {
-                //sendTextToNative();  // 逐字实时同步到 C# 层
             }
         });
 
-        // 加入到 UnityPlayer.getFrameLayout() → 1x1 透明无光标 → requestFocus
         try {
             Class<?> upClass = Class.forName("com.unity3d.player.UnityPlayer");
             Object unityPlayer = upClass.getField("currentActivity").get(null);
@@ -129,13 +127,10 @@ public class ModManagerUtils {
         }
     }
 
-    /** 发送 int[] 到 C 层，按 key 路由 */
     public static native void nativeSetData(String key, int[] data);
 
-    /** 从 C 层获取 int[]，按 key 路由 */
     public static native int[] nativeGetData(String key);
 
-    /** 整量同步 — 把 EditText 当前文本转为 int[] 发送到 C (每字符 = 一个 int) */
     public static void sendTextToNative() {
         if (sHiddenEditText == null) {
             nativeSetData("ime_text", null);

@@ -1,11 +1,10 @@
 using System.Reflection;
 using StArray.ModManager.Manager;
+using StArray.ModManager.UI;
 
 namespace StArray.ModManager.Runtime;
 
-/// <summary>
-/// Mod 管理器核心 —— 负责 Mod 的扫描、加载、启用/禁用
-/// </summary>
+/// <summary>Mod 管理器核心 / Mod loader — scan, load, enable/disable mods</summary>
 public class ModLoader
 {
     private readonly List<ModEntry> _mods = new();
@@ -126,7 +125,7 @@ public class ModLoader
 
         try
         {
-            // 先加载依赖
+    
             foreach (var depId in mod.Dependencies)
             {
                 var dep = _mods.FirstOrDefault(m => m.Id == depId);
@@ -136,7 +135,7 @@ public class ModLoader
                 }
                 if (dep.LoadState != ModLoadState.Loaded)
                 {
-                    Log($"  └─ 自动加载依赖: {dep.Name}");
+                    Log($"  load dep: {dep.Name}");
                     LoadMod(dep);
                 }
             }
@@ -147,7 +146,7 @@ public class ModLoader
                 var assembly = Assembly.LoadFrom(mod.EntryPoint);
                 Log($"{mod.Name} 程序集已加载: {assembly.GetName().Name}");
 
-                // 查找 IModPlugin 实现并执行
+
                 var pluginType = assembly.GetTypes()
                     .FirstOrDefault(t => typeof(IModPlugin).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
 
@@ -156,12 +155,17 @@ public class ModLoader
                     var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;
                     mod.PluginInstance = plugin;
                     plugin.OnLoad();
+
+
+                    if (plugin is IModSettings s)
+                        ModManagerUI.LoadSettings(mod, s);
+
                     Log($"{mod.Name} 插件入口已执行");
                 }
             }
             else
             {
-                // 没有入口 DLL 也算加载成功（纯数据 Mod）
+
                 Log($"{mod.Name} 无入口程序集，作为数据 Mod 加载");
             }
 

@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
-using StArray.ModManager.PInvoke;
 
-namespace StArray.ModManager.Java;
+namespace StArray.ModManager.PInvoke;
 
 /// <summary>
 /// Java 类封装 — 持有一个 jclass 全局引用，提供方法/字段查找和静态方法调用
@@ -28,7 +27,6 @@ public sealed class JavaClass : IDisposable
         Handle = NewGlobalRef(Env(), clazz);
     }
 
-    // ---- 方法 ----
 
     public IntPtr GetMethodID(string name, string sig)
         => JniHelperNative.GetMethodID(Handle, name, sig);
@@ -36,7 +34,6 @@ public sealed class JavaClass : IDisposable
     public IntPtr GetStaticMethodID(string name, string sig)
         => JniHelperNative.GetStaticMethodID(Handle, name, sig);
 
-    // ---- 字段 ----
 
     public IntPtr GetFieldID(string name, string sig)
         => JniHelperNative.GetFieldID(Handle, name, sig);
@@ -47,13 +44,18 @@ public sealed class JavaClass : IDisposable
     public IntPtr GetStaticObjectField(IntPtr fieldID)
         => JniHelperNative.GetStaticObjectField(Handle, fieldID);
 
-// ---- 静态方法调用 (vtable index 111-120) ----
 
     public IntPtr CallStaticObjectMethod0(nint m)
         => VTable<Obj0>(Env(), 111)(Env(), Handle, m);
 
     public IntPtr CallStaticObjectMethod1(nint m, nint a1)
         => VTable<Obj1>(Env(), 111)(Env(), Handle, m, a1);
+
+    public IntPtr CallStaticObjectMethod2(nint m, nint a1, nint a2)
+        => VTable<Obj2>(Env(), 111)(Env(), Handle, m, a1, a2);
+
+    public IntPtr CallStaticObjectMethod3(nint m, nint a1, nint a2, nint a3)
+        => VTable<Obj3>(Env(), 111)(Env(), Handle, m, a1, a2, a3);
 
     public void CallStaticVoidMethod0(nint m)
         => VTable<Void0>(Env(), 120)(Env(), Handle, m);
@@ -76,11 +78,9 @@ public sealed class JavaClass : IDisposable
         if (!_disposed) { JniHelperNative.DeleteGlobalRef(Handle); _disposed = true; }
     }
 
-    // ===== 底层 =====
 
     private static nint Env() => JniHelperNative.GetJNIEnv();
 
-    // ---- ClassLoader ----
 
     private static IntPtr FindViaClassLoader(IntPtr env, string name)
     {
@@ -101,7 +101,6 @@ public sealed class JavaClass : IDisposable
         return result;
     }
 
-    // ===== VTable 委托 =====
 
     private static IntPtr NewGlobalRef(IntPtr env, IntPtr obj)
         => VTable<ObjRef2>(env, 21)(env, obj);
@@ -115,6 +114,8 @@ public sealed class JavaClass : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr ObjRef2(IntPtr e, IntPtr o);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj0(IntPtr e, IntPtr o, IntPtr m);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj1(IntPtr e, IntPtr o, IntPtr m, nint a);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj2(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj3(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2, nint a3);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void0(IntPtr e, IntPtr o, IntPtr m);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void1(IntPtr e, IntPtr o, IntPtr m, nint a);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate nint IntRet(IntPtr e, IntPtr o, IntPtr m);
@@ -130,7 +131,6 @@ public sealed class JavaObject : IDisposable
 
     public JavaObject(IntPtr obj) => Handle = obj;
 
-    // ---- 方法 ----
 
     public IntPtr CallObjectMethod0(IntPtr m)
         => VTable<Obj0>(Env(), 34)(Env(), Handle, m);
@@ -153,12 +153,10 @@ public sealed class JavaObject : IDisposable
     public bool CallBoolMethod2(IntPtr m, IntPtr a1, IntPtr a2)
         => VTable<Bool2>(Env(), 37)(Env(), Handle, m, a1, a2) != 0;
 
-    // ---- 字段 ----
 
     public IntPtr GetObjectField(IntPtr fieldID)
         => JniHelperNative.GetObjectField(Handle, fieldID);
 
-    // ---- 类型 ----
 
     public JavaClass GetClass() => new(JniHelperNative.GetObjectClass(Handle));
 
@@ -167,7 +165,6 @@ public sealed class JavaObject : IDisposable
         if (!_disposed) { JniHelperNative.DeleteLocalRef(Handle); _disposed = true; }
     }
 
-    // ===== 底层 =====
 
     private static IntPtr Env() => JniHelperNative.GetJNIEnv();
 
@@ -184,4 +181,17 @@ public sealed class JavaObject : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void1(IntPtr e, IntPtr o, IntPtr m, nint a);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void2(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte Bool2(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2);
+}
+public static class NativeFunctions {
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void OnAcceptChar(uint codepoint);
+
+    [DllImport("modmanager", EntryPoint = "modmanager_set_OnAcceptCharCallback")]
+    public static extern void SetOnAcceptCharCallback(OnAcceptChar onAcceptChar);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void OnAcceptKey(int keyCode);
+
+    [DllImport("modmanager", EntryPoint = "modmanager_set_OnAcceptKeyCallback")]
+    public static extern void SetOnAcceptKeyCallback(OnAcceptKey onAcceptKey);
 }

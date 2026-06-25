@@ -1,24 +1,18 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
-using StArray.ModManager.Java;
 using StArray.ModManager.PInvoke;
 
 namespace StArray.ModManager.UI;
 
-/// <summary>
-/// ImGui 输入处理器 —— 管理触摸事件、按键事件 Hook 以及 IME 控制
-/// </summary>
-public static unsafe class ImGuiInputHandler
+/// <summary>ImGui input handler / 输入处理器 — touch/key hooks + IME control</summary>
+public static class ImGuiInputHandler
 {
-    // ===== P/Invoke delegates =====
-
     private static InitializeMotionEventDelegate s_initializeMotionEvent;
 
     private delegate int InitializeMotionEventDelegate(IntPtr self, IntPtr motionEvent, IntPtr message);
 
-    // ===== IME 状态 =====
-    private static bool s_wantTextInputLast = false;
+    private static bool s_wantTextInputLast;
 
     /// <summary>
     /// 安装触摸事件和按键事件 Hook
@@ -34,15 +28,15 @@ public static unsafe class ImGuiInputHandler
         s_initializeMotionEvent = Marshal.GetDelegateForFunctionPointer<InitializeMotionEventDelegate>(origin);
 
         // IME 字符回调：Java nativeSendChar → C → 此回调 → ImGui
-        Misc.SetOnAcceptCharCallback(codepoint =>
+        NativeFunctions.SetOnAcceptCharCallback(codepoint =>
         {
-            ImGuiNET.ImGui.GetIO().AddInputCharacter(codepoint);
+            ImGui.GetIO().AddInputCharacter(codepoint);
         });
 
         // IME 特殊键回调：Java nativeSendKey → C → 此回调 → ImGui
-        Misc.SetOnAcceptKeyCallback(keyCode =>
+        NativeFunctions.SetOnAcceptKeyCallback(keyCode =>
         {
-            var io = ImGuiNET.ImGui.GetIO();
+            var io = ImGui.GetIO();
             switch (keyCode)
             {
                 case 67:  io.AddKeyEvent(ImGuiKey.Backspace, true);  io.AddKeyEvent(ImGuiKey.Backspace, false); break;   // KEYCODE_DEL
@@ -53,10 +47,8 @@ public static unsafe class ImGuiInputHandler
             }
         });
 
-        AndroidLog.Info(nameof(ImGuiInputHandler), "Input hooks installed");
+        AndroidUtils.Info(nameof(ImGuiInputHandler), "Input hooks installed");
     }
-
-    // ===== Hook 回调（UnmanagedCallersOnly） =====
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnTouchEvent(IntPtr self, IntPtr motionEvent, IntPtr message)
@@ -67,14 +59,12 @@ public static unsafe class ImGuiInputHandler
         return result;
     }
 
-    // ===== IME 控制（WantTextInput 边沿触发） =====
-
     private static JavaClass? s_utilsClass;
     private static nint s_showKeyboardMethod;
 
     public static void UpdateIme()
     {
-        bool want = ImGuiNET.ImGui.GetIO().WantTextInput;
+        bool want = ImGui.GetIO().WantTextInput;
         if (want == s_wantTextInputLast) return;
         s_wantTextInputLast = want;
 
@@ -86,7 +76,6 @@ public static unsafe class ImGuiInputHandler
         }
 
         s_utilsClass.CallStaticVoidMethod1(s_showKeyboardMethod, want ? 1 : 0);
-        AndroidLog.Info(nameof(ImGuiInputHandler), $"IME {(want ? "Show" : "Hide")}");
+        AndroidUtils.Info(nameof(ImGuiInputHandler), $"IME {(want ? "Show" : "Hide")}");
     }
-
 }

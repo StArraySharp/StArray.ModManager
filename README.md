@@ -31,8 +31,6 @@ StArray.ModManager/          C# mod manager (.NET 10)
     AndroidLog.cs            Logcat logging
     UnityResolve.cs          IL2CPP reflection engine
   Manager/
-    IInputProvider.cs        Input provider interface
-    MotionInputProvider.cs   Motion event hook
     MotionEventHook.cs       InputConsumer hook
     AndroidIME.cs            IME manager
   Unity/

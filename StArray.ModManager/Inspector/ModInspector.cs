@@ -7,13 +7,9 @@ using StArray.ModManager.Runtime;
 
 namespace StArray.ModManager.Inspector;
 
-/// <summary>
-/// 自动检查器 —— 反射字段自动生成 ImGui 控件（类似 Unity Inspector）
-/// </summary>
+/// <summary>自动检查器 / Auto inspector — reflection-based ImGui controls (Unity Inspector style)</summary>
 public static class ModInspector
 {
-    // ====== 缓存 ======
-
     private static readonly ConcurrentDictionary<Type, Entry[]> Cache = new();
     private static readonly ConcurrentDictionary<Type, Delegate> CustomDrawers = new();
 
@@ -23,9 +19,7 @@ public static class ModInspector
         float RangeMin, float RangeMax, bool HasRange, int JsonLines,
         float[]? VecMins, float[]? VecMaxs);
 
-    // ====== 公开 API ======
-
-    /// <summary>为目标对象自动绘制检查器</summary>
+    /// <summary>为目标对象自动绘制检查器 / Draw inspector for target object</summary>
     public static void Draw(object target)
     {
         var type = target.GetType();
@@ -38,20 +32,27 @@ public static class ModInspector
         }
     }
 
-    /// <summary>注册自定义类型绘制器（用于无法修改源码的类型）</summary>
+    /// <summary>注册自定义类型绘制器 / Register custom type drawer</summary>
     public static void RegisterDrawer<T>(Action<T> draw) where T : notnull
         => CustomDrawers[typeof(T)] = draw;
 
-    // ---- 供 Mod 手动调用的控件方法 ----
-
+    /// <summary>Checkbox / bool checkbox</summary>
     public static bool Bool(string label, ref bool v) => ImGui.Checkbox(label, ref v);
+    /// <summary>DragInt / int drag</summary>
     public static bool Int(string label, ref int v) => ImGui.DragInt(label, ref v, 0.5f);
+    /// <summary>SliderInt / int slider</summary>
     public static bool SliderInt(string label, ref int v, int min, int max) => ImGui.SliderInt(label, ref v, min, max);
+    /// <summary>Drag (long) / long drag</summary>
     public static bool Long(string label, ref long v) { var i = (int)v; if (ImGui.DragInt(label, ref i, 1f)) { v = i; return true; } return false; }
+    /// <summary>DragFloat / float drag</summary>
     public static bool Float(string label, ref float v) => ImGui.DragFloat(label, ref v, 0.1f);
+    /// <summary>SliderFloat / float slider</summary>
     public static bool SliderFloat(string label, ref float v, float min, float max) => ImGui.SliderFloat(label, ref v, min, max);
+    /// <summary>Drag (double) / double drag</summary>
     public static bool Double(string label, ref double v) { var f = (float)v; if (ImGui.DragFloat(label, ref f, 0.1f)) { v = f; return true; } return false; }
+    /// <summary>InputText / string input</summary>
     public static bool Text(string label, ref string v, uint maxLen = 256) => ImGui.InputText(label, ref v, maxLen);
+    /// <summary>Combo 枚举 / enum combo</summary>
     public static bool Enum<T>(string label, ref T v) where T : struct, System.Enum
     {
         var names = System.Enum.GetNames<T>();
@@ -64,24 +65,28 @@ public static class ModInspector
         }
         return false;
     }
-    public static bool Vec2(string label, ref Vector2 v) => ImGui.DragFloat2(label, ref v, 0.1f);
-    public static bool Vec3(string label, ref Vector3 v) => ImGui.DragFloat3(label, ref v, 0.1f);
-    public static bool Vec4(string label, ref Vector4 v) => ImGui.DragFloat4(label, ref v, 0.1f);
-    public static bool Vec2(string label, ref Vector2 v, float min, float max) => ImGui.SliderFloat2(label, ref v, min, max);
-    public static bool Vec3(string label, ref Vector3 v, float min, float max) => ImGui.SliderFloat3(label, ref v, min, max);
-    public static bool Vec4(string label, ref Vector4 v, float min, float max) => ImGui.SliderFloat4(label, ref v, min, max);
 
-    // ====== 内部实现 ======
+    /// <summary>DragFloat2 / Vector2 drag</summary>
+    public static bool Vec2(string label, ref Vector2 v) => ImGui.DragFloat2(label, ref v, 0.1f);
+    /// <summary>DragFloat3 / Vector3 drag</summary>
+    public static bool Vec3(string label, ref Vector3 v) => ImGui.DragFloat3(label, ref v, 0.1f);
+    /// <summary>DragFloat4 / Vector4 drag</summary>
+    public static bool Vec4(string label, ref Vector4 v) => ImGui.DragFloat4(label, ref v, 0.1f);
+    /// <summary>SliderFloat2 / Vector2 slider</summary>
+    public static bool Vec2(string label, ref Vector2 v, float min, float max) => ImGui.SliderFloat2(label, ref v, min, max);
+    /// <summary>SliderFloat3 / Vector3 slider</summary>
+    public static bool Vec3(string label, ref Vector3 v, float min, float max) => ImGui.SliderFloat3(label, ref v, min, max);
+    /// <summary>SliderFloat4 / Vector4 slider</summary>
+    public static bool Vec4(string label, ref Vector4 v, float min, float max) => ImGui.SliderFloat4(label, ref v, min, max);
 
     private static Entry[] BuildEntries(Type type)
     {
         var list = new List<Entry>();
 
-        // 实例字段
         foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
         {
             if (f.GetCustomAttribute<ModSettingIgnoreAttribute>() != null) continue;
-            if (type.GetEvent(f.Name) != null) continue; // 跳过事件字段
+            if (type.GetEvent(f.Name) != null) continue;
             var attrs = f.GetCustomAttributes().ToArray();
             list.Add(MakeEntry(f.Name, f.FieldType,
                 attrs.OfType<ModSettingLabelAttribute>().FirstOrDefault(),
@@ -89,7 +94,6 @@ public static class ModInspector
                 t => f.GetValue(t), (t, v) => f.SetValue(t, v), attrs));
         }
 
-        // 静态字段
         foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Static))
         {
             if (f.GetCustomAttribute<ModSettingIgnoreAttribute>() != null) continue;
@@ -100,7 +104,6 @@ public static class ModInspector
                 _ => f.GetValue(null), (_, v) => f.SetValue(null, v)));
         }
 
-        // 实例属性
         foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (p.GetCustomAttribute<ModSettingIgnoreAttribute>() != null) continue;
@@ -113,7 +116,6 @@ public static class ModInspector
                 p.GetCustomAttribute<ModSettingRangeAttribute>(), get, set));
         }
 
-        // 静态属性
         foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
         {
             if (p.GetCustomAttribute<ModSettingIgnoreAttribute>() != null) continue;
@@ -188,7 +190,7 @@ public static class ModInspector
         catch { return null; }
     }
 
-    // ====== 类型分发 ======
+
 
     private static bool TryDrawField(Entry e, object? value, out object? newValue)
     {
@@ -203,7 +205,6 @@ public static class ModInspector
         if (type == typeof(double) && value is double dv) { var v = dv; if (Double(e.Label, ref v)) { newValue = v; return true; } return false; }
         if (type.IsEnum) { var v = value ?? Activator.CreateInstance(type); return TryDrawEnum(e.Label, type, v, out newValue); }
 
-        // ---- string（含 JSON 多行/树状 + 诊断） ----
         if (type == typeof(string) && value is string s)
         {
             var v = s ?? "";
@@ -230,7 +231,7 @@ public static class ModInspector
                         }
                         catch (Exception ex)
                         {
-                            ImGui.TextColored(new Vector4(1, 0.4f, 0.4f, 1), $"JSON 错误: {ex.Message}");
+                            ImGui.TextColored(new Vector4(1, 0.4f, 0.4f, 1), $"JSON: {ex.Message}");
                         }
                     }
                     ImGui.TreePop();
@@ -241,7 +242,7 @@ public static class ModInspector
             return false;
         }
 
-        // ---- Vector 类型（含 Range） ----
+        
         if (type == typeof(Vector2) && value is Vector2 v2)
         {
             var v = v2;
@@ -282,7 +283,7 @@ public static class ModInspector
             return false;
         }
 
-        // ---- ValueTuple<数字> → Vec2/3/4 ----
+        
         if (value != null && type.IsGenericType && type.Name.StartsWith("ValueTuple`"))
         {
             var args = type.GetGenericArguments();
@@ -310,23 +311,23 @@ public static class ModInspector
             }
         }
 
-        // ---- 注册处理器 ----
+        
         if (CustomDrawers.TryGetValue(type, out var d)) { d.DynamicInvoke(value); return false; }
 
-        // ---- IModSettingCustomDraw ----
+        
         if (value is IModSettingCustomDraw cd)
         {
             if (ImGui.TreeNode(e.Label)) { Draw(value); ImGui.Separator(); cd.DrawInspector(); ImGui.TreePop(); }
             return type.IsValueType;
         }
 
-        // ---- JSON 编辑器：IEnumerable / IDictionary / 容器类型 ----
+        
         if (value != null && (value is System.Collections.IEnumerable && !(value is string)))
         {
             return DrawJsonEditor(e, type, value, out newValue);
         }
 
-        // ---- 递归展开（用户定义结构体/类） ----
+        
         if (!type.IsPrimitive && type != typeof(string) && !type.IsEnum
             && type != typeof(Vector2) && type != typeof(Vector3) && type != typeof(Vector4)
             && value != null && !type.IsGenericType)
@@ -335,7 +336,7 @@ public static class ModInspector
             return type.IsValueType;
         }
 
-        // ---- JSON 兜底（Generic types that couldn't be handled above） ----
+        
         if (value != null && !type.IsPrimitive && type != typeof(string))
         {
             return DrawJsonEditor(e, type, value, out newValue);
@@ -362,7 +363,7 @@ public static class ModInspector
         t == typeof(int) || t == typeof(long) || t == typeof(float) || t == typeof(double)
         || t == typeof(short) || t == typeof(byte) || t == typeof(decimal);
 
-    // ====== JSON 编辑器 ======
+
 
     private static readonly ConcurrentDictionary<string, string> JsonEditCache = new();
 
@@ -373,12 +374,12 @@ public static class ModInspector
 
         if (!ImGui.TreeNode(e.Label)) return type.IsValueType;
 
-        // 获取或初始化编辑文本
+        
         var currentJson = System.Text.Json.JsonSerializer.Serialize(value,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         var editText = JsonEditCache.GetOrAdd(key, currentJson);
 
-        // 如果值被外部修改，更新编辑文本
+        
         if (editText != currentJson && !ImGui.IsItemActive())
             editText = JsonEditCache[key] = currentJson;
 
