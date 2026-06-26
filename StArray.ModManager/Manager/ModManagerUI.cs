@@ -20,24 +20,24 @@ public partial class ModManagerUI
     private readonly string _configDir;
 
     private bool _showAddModPopup;
-    private bool _showMainWindow = true;
     private string? _expandedModId;
 
     // 通知
     private string _toastMessage = string.Empty;
     private float _toastTimer;
 
+    private bool _configApplied;
+
     public ModManagerUI(ModLoader modManager)
     {
         _modManager = modManager;
         Logger.OnLog += OnLogMessage;
 
-        // 配置与 DLL 同目录
-        _configDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        _configDir = Path.GetDirectoryName(Managed.AssemblyPath)!;
         _config = ModManagerConfig.Load(_configDir);
         if (string.IsNullOrEmpty(_config.ModsDirectory))
             _config.ModsDirectory = _modManager.ModsDirectory;
-        ApplyConfig();
+        _modManager.ScanMods();
         AutoEnableMods();
     }
 
@@ -48,6 +48,18 @@ public partial class ModManagerUI
         var style = ImGui.GetStyle();
         style.GrabMinSize = _config.GrabMinSize;
         style.ScrollbarSize = _config.ScrollbarSize;
+        ApplyStyleScale();
+    }
+
+    private void ApplyStyleScale()
+    {
+        float scale = ImGui.GetIO().FontGlobalScale / 2f;
+        var style = ImGui.GetStyle();
+        style.FramePadding = new Vector2(4f * scale, 3f * scale);
+        style.ItemSpacing = new Vector2(8f * scale, 4f * scale);
+        style.ItemInnerSpacing = new Vector2(4f * scale, 4f * scale);
+        style.FrameRounding = 3f * scale;
+        style.WindowPadding = new Vector2(8f * scale, 8f * scale);
     }
 
     /// <summary>保存管理器全局配置</summary>
@@ -103,6 +115,11 @@ public partial class ModManagerUI
     /// </summary>
     public void Render()
     {
+        if (!_configApplied)
+        {
+            ApplyConfig();
+            _configApplied = true;
+        }
         RenderMainWindow();
         RenderModSettingsWindow();
         RenderAddModPopup();
@@ -111,11 +128,8 @@ public partial class ModManagerUI
 
     private void RenderMainWindow()
     {
-        if (!_showMainWindow) return;
-
         ImGui.SetNextWindowSize(new Vector2(680, 650), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin(L10n.Get("MainWindow_Title"), ref _showMainWindow))
-        {
+        ImGui.Begin(L10n.Get("MainWindow_Title"));
             ImGui.PushTextWrapPos();
             if (ImGui.BeginTabBar("MainTabs"))
             {
@@ -217,17 +231,16 @@ public partial class ModManagerUI
 
                         if (ImGui.BeginTabItem(L10n.Get("Tab_Settings")))
                         {
-                            var dir = _config.ModsDirectory;
-                            ImGui.Text(L10n.Get("Settings_ModsDir"));
-                            ImGui.SameLine();
-                            ImGui.InputText("##modsDir", ref dir, 500);
-                            if (dir != _config.ModsDirectory) _config.ModsDirectory = dir;
+                            ImGui.Text(L10n.Get("Settings_ModsDir") + " " + _config.ModsDirectory);
                             ImGui.Separator();
 
                             ImGui.Text(L10n.Get("Settings_UiScale"));
                             float uiscale = ImGui.GetIO().FontGlobalScale;
                             if (ImGui.SliderFloat("##uiscale", ref uiscale, 1f, 5f, "%.1f"))
+                            {
                                 ImGui.GetIO().FontGlobalScale = uiscale;
+                                ApplyStyleScale();
+                            }
 
                             var style = ImGui.GetStyle();
                             ImGui.Text(L10n.Get("Settings_GrabSize"));
@@ -241,7 +254,7 @@ public partial class ModManagerUI
                                 style.ScrollbarSize = scrollW;
 
                             ImGui.Separator();
-                            if (ImGui.Button($"{FontAwesome7.FloppyDisk} 保存设置", new Vector2(120, 0)))
+                            if (ImGui.Button($"{FontAwesome7.FloppyDisk} 保存设置"))
                             {
                                 SaveConfig();
                                 _toastMessage = $"{FontAwesome7.CircleCheck} 设置已保存";
@@ -264,7 +277,6 @@ public partial class ModManagerUI
                 ImGui.EndTabBar();
             }
             ImGui.PopTextWrapPos();
-        }
         ImGui.End();
     }
 

@@ -44,7 +44,7 @@ public class ModManager {
     }
 
     private void extractRuntime(){
-        if (Files.exists(Paths.get(runtimeDir))){
+        if (Files.exists(Paths.get(runtimeDir, "System.Private.CoreLib.dll"))){
             return;
         }
         try {
@@ -54,8 +54,10 @@ public class ModManager {
                 Files.createDirectories(Paths.get(runtimeDir));
             }
             for (String dll : Objects.requireNonNull(dlls)) {
-                var fis = activity.getAssets().open(dll);
-                OutputStream out = new FileOutputStream(Paths.get(runtimeDir,new File(dll).getName()).toFile());
+                var fis = activity.getAssets().open("runtime/" + dll);
+                File outputDll = Paths.get(runtimeDir,new File(dll).getName()).toFile();
+                outputDll.createNewFile();
+                OutputStream out = new FileOutputStream(outputDll);
                 {
                     byte[] buffer = new byte[8192];
                     int length;

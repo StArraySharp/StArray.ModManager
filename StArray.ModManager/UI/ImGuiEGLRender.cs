@@ -92,6 +92,9 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         var self = s_instance!;
         try
         {
+            // 检查 surface 是否仍然有效
+            Egl.GetError(); // 清除之前的错误
+
             // 使用 EGL 查询 surface 尺寸
             if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
                 !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
@@ -124,6 +127,13 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             // 渲染
             ImGui.Render();
             ImGuiImplOpenGL3.RenderDrawData((IntPtr)ImGui.GetDrawData().NativePtr);
+
+            // 渲染后检查 surface 是否已被废弃
+            var err = Egl.GetError();
+            if (err != ErrorCode.SUCCESS)
+            {
+                Logger.Warn(nameof(ImGuiEGLRenderer), $"EGL error after render: 0x{err:X}");
+            }
         }
         catch (Exception ex)
         {
@@ -151,6 +161,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
 
         // 创建 ImGui 上下文
         ImGui.CreateContext();
+        ImGuiInputHandler.IsInitialized = true;
 
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;

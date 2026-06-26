@@ -5,7 +5,6 @@ import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.Context;
-import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
@@ -71,6 +70,13 @@ public class ModManagerUpdater {
     // ──── 入口 ────
 
     public void start() {
+        start(true);
+    }
+
+    /**
+     * @param useNewThread true=在新线程启动 ModManager，false=当前线程
+     */
+    public void start(boolean useNewThread) {
         if (versionJsonUrl == null || versionJsonUrl.isEmpty())
             throw new IllegalStateException("versionJsonUrl not set");
         if (basePath == null)
@@ -82,117 +88,160 @@ public class ModManagerUpdater {
         var localDll = managerDir.resolve("StArray.ModManager.dll");
         var localVerFile = managerDir.resolve("version.json");
 
+
         VersionInfo localVersion = null;
         try {
-            if (Files.exists(localDll) && Files.exists(localVerFile))
-                localVersion = parseVersionJson(Files.readString(localVerFile));
-        } catch (IOException ignored) {}
+            if (Files.exists(localDll) && Files.exists(localVerFile)) {
+                localVersion = parseVersionJson(new String(Files.readAllBytes(localVerFile)));
+                Log.i(TAG, "Local version: " + localVersion.version + " (code=" + localVersion.versionCode + ")");
+            } else {
+                Log.i(TAG, "No local manager found");
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to read local version: " + e.getMessage());
+        }
 
         boolean hasLocal = localVersion != null;
 
         // 有本地版本 → 先启动，后台检查更新
         if (hasLocal) {
-            launch(managerDir, runtimeDir, modsDir);
+            Log.i(TAG, "Launching existing manager v" + localVersion.version);
+            launch(managerDir, runtimeDir, modsDir, useNewThread);
+        } else {
+            Log.i(TAG, "No local manager found, will download");
         }
 
+        VersionInfo finalLocalVersion = localVersion;
         CompletableFuture
-            .supplyAsync(() -> {
-                try { return fetchVersionJson(); }
-                catch (UncheckedIOException e) {
-                    Log.w(TAG, "Cannot fetch version.json: " + e.getMessage());
+                .supplyAsync(() -> {
+                    Log.i(TAG, "Fetching remote version.json...");
+                    try {
+                        return fetchVersionJson();
+                    } catch (Exception e) {
+                        Log.e(TAG, "Cannot fetch version.json: " + e.getMessage());
+                        return null;
+                    }
+                })
+                .thenAccept(remote -> {
+                    if (remote == null) {
+                        Log.w(TAG, "Remote version check failed (network error)");
+                        if (!hasLocal)
+                            activity.runOnUiThread(() -> showError("无法连接服务器，且本地无可用管理器"));
+                        return;
+                    }
+                    Log.i(TAG, "Remote version: " + remote.version + " (code=" + remote.versionCode + ")");
+                    boolean needUpdate = !hasLocal
+                            || finalLocalVersion.versionCode < remote.versionCode;
+                    Log.i(TAG, "needUpdate=" + needUpdate + " hasLocal=" + hasLocal);
+                    if (!needUpdate) {
+                        Log.i(TAG, "Manager is up to date");
+                        if (!hasLocal) launch(managerDir, runtimeDir, modsDir, useNewThread);
+                    } else if (hasLocal) {
+                        Log.i(TAG, "Update available: v" + finalLocalVersion.version + " → v" + remote.version);
+                        activity.runOnUiThread(() -> showUpdateDialog(remote, managerDir, runtimeDir, modsDir, useNewThread));
+                    } else {
+                        Log.i(TAG, "First install: downloading v" + remote.version);
+                        activity.runOnUiThread(() -> showDownloadDialog(remote, managerDir, runtimeDir, modsDir, false, useNewThread));
+                    }
+                })
+                .exceptionally(ex -> {
+                    Log.e(TAG, "Unexpected error in update check", ex);
                     return null;
-                }
-            })
-            .thenAcceptAsync(remote -> {
-                if (remote == null) {
-                    if (!hasLocal) showError("无法连接服务器，且本地无可用管理器");
-                    return;
-                }
-                boolean needUpdate = !hasLocal
-                    || localVersion.versionCode < remote.versionCode;
-                if (!needUpdate) {
-                    if (!hasLocal) launch(managerDir, runtimeDir, modsDir);
-                    // 有本地且已最新 → 已在上方启动，无需操作
-                } else if (hasLocal) {
-                    showUpdateDialog(remote, managerDir, runtimeDir, modsDir);
-                } else {
-                    showDownloadDialog(remote, managerDir, runtimeDir, modsDir, false);
-                }
-            }, mainHandler::post);
+                });
     }
 
     // ──── 对话框 ────
 
-    private void showUpdateDialog(VersionInfo remote, Path mgr, Path rt, Path mods) {
+    private void showUpdateDialog(VersionInfo remote, Path mgr, Path rt, Path mods, boolean useNewThread) {
+        Log.i(TAG, "Showing update dialog for v" + remote.version);
         new AlertDialog.Builder(activity)
-            .setTitle("ModManager")
-            .setMessage("有可用更新！\nv" + remote.version + "\n是否更新？")
-            .setPositiveButton("更新", (d, w) -> {
-                d.dismiss();
-                showDownloadDialog(remote, mgr, rt, mods, true);
-            })
-            .setNegativeButton("否", (d, w) -> {
-                d.dismiss();
-                launch(mgr, rt, mods);
-            })
-            .setCancelable(false)
-            .show();
+                .setTitle("ModManager")
+                .setMessage("有可用更新！\nv" + remote.version + "\n是否更新？")
+                .setPositiveButton("更新", (d, w) -> {
+                    d.dismiss();
+                    showDownloadDialog(remote, mgr, rt, mods, true, useNewThread);
+                })
+                .setNegativeButton("否", (d, w) -> {
+                    d.dismiss();
+                    launch(mgr, rt, mods, useNewThread);
+                })
+                .setCancelable(false)
+                .show();
     }
 
-    private void showDownloadDialog(VersionInfo remote, Path mgr, Path rt, Path mods, boolean hasLocal) {
+    private void showDownloadDialog(VersionInfo remote, Path mgr, Path rt, Path mods, boolean hasLocal, boolean useNewThread) {
+        Log.i(TAG, "Starting download: url=" + remote.managerUrl + " target=" + mgr);
         var dialog = new AlertDialog.Builder(activity)
-            .setTitle(hasLocal ? "更新中" : "下载中")
-            .setMessage("正在下载...")
-            .setCancelable(hasLocal)
-            .create();
+                .setTitle(hasLocal ? "更新中" : "下载中")
+                .setMessage("正在下载...")
+                .setCancelable(hasLocal)
+                .create();
         if (!hasLocal) {
             dialog.setCancelable(false);
             dialog.setCanceledOnTouchOutside(false);
+            Log.i(TAG, "First install: dialog non-cancelable");
         }
         dialog.show();
 
         CompletableFuture
-            .supplyAsync(() -> downloadAndExtractSync(remote, mgr, dialog))
-            .thenAcceptAsync(dir -> {
-                dialog.dismiss();
-                restartApp();
-            }, mainHandler::post)
-            .exceptionally(ex -> {
-                var msg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
-                if (msg == null) msg = "下载失败";
-                dialog.dismiss();
-                if (hasLocal) launch(mgr, rt, mods);
-                else showError(msg);
-                return null;
-            });
+                .supplyAsync(() -> downloadAndExtractSync(remote, mgr, dialog))
+                .thenAccept(dir -> {
+                    Log.i(TAG, "Download complete, restarting app");
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        restartApp();
+                    });
+                })
+                .exceptionally(ex -> {
+                    var msg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
+                    if (msg == null) msg = "下载失败";
+                    Log.e(TAG, "Download failed: " + msg, ex);
+                    String finalMsg = msg;
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        if (hasLocal) {
+                            Log.i(TAG, "Falling back to existing manager");
+                            launch(mgr, rt, mods, useNewThread);
+                        } else showError(finalMsg);
+                    });
+                    return null;
+                });
     }
 
     private void showError(String message) {
+        Log.w(TAG, "Showing error dialog: " + message);
         new AlertDialog.Builder(activity)
-            .setTitle("错误")
-            .setMessage(message)
-            .setPositiveButton("确定", (d, w) -> d.dismiss())
-            .show();
+                .setTitle("错误")
+                .setMessage(message)
+                .setPositiveButton("确定", (d, w) -> d.dismiss())
+                .show();
     }
 
     // ──── 下载（同步，后台线程调用） ────
 
     private Path downloadAndExtractSync(VersionInfo version, Path targetDir, AlertDialog dialog) {
         try {
+            Log.i(TAG, "Downloading v" + version.version + " → " + targetDir);
             Files.createDirectories(targetDir);
             var zipFile = targetDir.getParent().resolve("manager-download.zip");
 
             updateDialog(dialog, "正在下载...", -1);
             downloadFile(version.managerUrl, zipFile,
-                pct -> updateDialog(dialog, "正在下载 " + pct + "%", pct));
+                    pct -> updateDialog(dialog, "正在下载 " + pct + "%", pct));
+
+            long zipSize = Files.size(zipFile);
+            Log.i(TAG, "Downloaded " + zipSize + " bytes");
 
             if (version.sha256 != null && !version.sha256.isEmpty()) {
                 updateDialog(dialog, "校验中...", -1);
+                Log.i(TAG, "Verifying SHA-256...");
                 var actual = sha256(zipFile);
                 if (!actual.equalsIgnoreCase(version.sha256)) {
+                    Log.e(TAG, "SHA-256 mismatch! expected=" + version.sha256 + " actual=" + actual);
                     Files.delete(zipFile);
                     throw new IOException("SHA-256 mismatch");
                 }
+                Log.i(TAG, "SHA-256 OK");
             }
 
             updateDialog(dialog, "正在解压...", -1);
@@ -200,40 +249,51 @@ public class ModManagerUpdater {
             unzip(zipFile, targetDir);
 
             var marker = "{\"version\":\"" + version.version +
-                "\",\"versionCode\":" + version.versionCode + "}";
-            Files.writeString(targetDir.resolve("version.json"), marker);
+                    "\",\"versionCode\":" + version.versionCode + "}";
+            Files.write(targetDir.resolve("version.json"), marker.getBytes());
 
             Files.delete(zipFile);
-            Log.i(TAG, "Manager v" + version.version + " installed");
+            Log.i(TAG, "Manager installed successfully");
             return targetDir;
         } catch (IOException e) {
+            Log.e(TAG, "downloadAndExtractSync failed: " + e.getMessage(), e);
             throw new UncheckedIOException(e);
         }
     }
 
     // ──── 启动 ────
 
-    private void launch(Path mgr, Path rt, Path mods) {
-        try {
-            if (!Files.exists(mods)) Files.createDirectories(mods);
-            new ModManager()
-                .dotnetRoot(rt.toString())
-                .addAssemblyDir(mgr.toAbsolutePath().toString())
-                .start("StArray.ModManager.dll",
-                       "StArray.ModManager.Managed", "Entry",
-                       mods.toAbsolutePath().toString());
-            Log.i(TAG, "ModManager started");
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    private void launch(Path mgr, Path rt, Path mods, boolean useNewThread) {
+        Runnable task = () -> {
+            try {
+                Log.i(TAG, "Launching ModManager: mgr=" + mgr + " rt=" + rt + " mods=" + mods);
+                if (!Files.exists(mods)) {
+                    Files.createDirectories(mods);
+                    Log.i(TAG, "Created mods directory: " + mods);
+                }
+                new ModManager()
+                        .dotnetRoot(rt.toString())
+                        .addAssemblyDir(mgr.toAbsolutePath().toString())
+                        .start("StArray.ModManager.dll",
+                                "StArray.ModManager.Managed", "Entry",
+                                mods.toAbsolutePath().toString());
+                Log.i(TAG, "ModManager started");
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to create mods directory: " + e.getMessage(), e);
+                throw new UncheckedIOException(e);
+            }
+        };
+        if (useNewThread) new Thread(task).start();
+        else task.run();
     }
-
     // ──── 远程版本 ────
 
-    private VersionInfo fetchVersionJson() {
+    private VersionInfo fetchVersionJson () {
         try {
-            return parseVersionJson(httpGetString(versionJsonUrl));
+            var json = httpGetString(versionJsonUrl);
+            return parseVersionJson(json);
         } catch (IOException e) {
+            Log.e(TAG, "Failed to fetch version.json: " + e.getMessage(), e);
             throw new UncheckedIOException(e);
         }
     }
@@ -245,10 +305,14 @@ public class ModManagerUpdater {
         String sha256;
     }
 
-    private static VersionInfo parseVersionJson(String json) {
+    private static VersionInfo parseVersionJson (String json){
         var v = new VersionInfo();
         v.version = extractJsonString(json, "version");
-        v.versionCode = Integer.parseInt(extractJsonString(json, "versionCode", "0"));
+        try {
+            v.versionCode = Integer.parseInt(extractJsonString(json, "versionCode", "0"));
+        } catch (NumberFormatException e) {
+            v.versionCode = 0;
+        }
         v.managerUrl = extractJsonString(json, "manager");
         v.sha256 = extractJsonString(json, "sha256", "");
         return v;
@@ -256,19 +320,30 @@ public class ModManagerUpdater {
 
     // ──── HTTP ────
 
-    private static String httpGetString(String urlStr) throws IOException {
+    private static String httpGetString (String urlStr) throws IOException {
         var conn = openConnection(urlStr, 15_000, 15_000);
-        try (var in = conn.getInputStream()) {
-            return new String(in.readAllBytes());
-        } finally { conn.disconnect(); }
+        try (var in = conn.getInputStream();
+             var out = new java.io.ByteArrayOutputStream()) {
+            byte[] buf = new byte[4096];
+            int read;
+            while ((read = in.read(buf)) != -1) out.write(buf, 0, read);
+            return out.toString("UTF-8");
+        } finally {
+            conn.disconnect();
+        }
     }
 
     @FunctionalInterface
-    private interface ProgressCallback { void onProgress(int percent); }
+    private interface ProgressCallback {
+        void onProgress(int percent);
+    }
 
-    private static void downloadFile(String urlStr, Path dest, ProgressCallback cb) throws IOException {
+    private static void downloadFile (String urlStr, Path dest, ProgressCallback cb) throws
+            IOException {
+        Log.i(TAG, "Downloading " + urlStr);
         var conn = openConnection(urlStr, 30_000, 120_000);
         int cl = conn.getContentLength();
+        Log.i(TAG, "Content-Length: " + cl);
         try (var in = new BufferedInputStream(conn.getInputStream());
              var out = Files.newOutputStream(dest)) {
             byte[] buf = new byte[8192];
@@ -281,10 +356,14 @@ public class ModManagerUpdater {
                     mainHandler.post(() -> cb.onProgress(pct));
                 }
             }
-        } finally { conn.disconnect(); }
+            Log.i(TAG, "Download complete: " + total + " bytes");
+        } finally {
+            conn.disconnect();
+        }
     }
 
-    private static HttpURLConnection openConnection(String urlStr, int cto, int rto) throws IOException {
+    private static HttpURLConnection openConnection (String urlStr,int cto, int rto) throws
+            IOException {
         var conn = (HttpURLConnection) new URL(urlStr).openConnection();
         conn.setRequestMethod("GET");
         conn.setConnectTimeout(cto);
@@ -295,33 +374,38 @@ public class ModManagerUpdater {
 
     // ──── 文件 ────
 
-    private static void unzip(Path zip, Path targetDir) throws IOException {
+    private static void unzip (Path zip, Path targetDir) throws IOException {
         try (var zis = new ZipInputStream(new BufferedInputStream(Files.newInputStream(zip)))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 var f = targetDir.resolve(entry.getName());
                 if (entry.isDirectory()) Files.createDirectories(f);
-                else { Files.createDirectories(f.getParent());
-                       Files.copy(zis, f, StandardCopyOption.REPLACE_EXISTING); }
+                else {
+                    Files.createDirectories(f.getParent());
+                    Files.copy(zis, f, StandardCopyOption.REPLACE_EXISTING);
+                }
                 zis.closeEntry();
             }
         }
     }
 
-    private static String sha256(Path file) throws IOException {
+    private static String sha256 (Path file) throws IOException {
         try {
             var md = MessageDigest.getInstance("SHA-256");
             try (var in = Files.newInputStream(file)) {
-                byte[] buf = new byte[8192]; int read;
+                byte[] buf = new byte[8192];
+                int read;
                 while ((read = in.read(buf)) != -1) md.update(buf, 0, read);
             }
             var sb = new StringBuilder();
             for (byte b : md.digest()) sb.append(String.format("%02x", b));
             return sb.toString();
-        } catch (NoSuchAlgorithmException e) { throw new IOException(e); }
+        } catch (NoSuchAlgorithmException e) {
+            throw new IOException(e);
+        }
     }
 
-    private static void clearDirectory(File dir) {
+    private static void clearDirectory (File dir){
         var files = dir.listFiles();
         if (files != null) for (var f : files) {
             if (f.isDirectory()) clearDirectory(f);
@@ -331,10 +415,12 @@ public class ModManagerUpdater {
 
     // ──── 重启 ────
 
-    private void restartApp() {
+    private void restartApp () {
+        Log.i(TAG, "Restarting app...");
         var intent = activity.getPackageManager()
-            .getLaunchIntentForPackage(activity.getPackageName());
+                .getLaunchIntentForPackage(activity.getPackageName());
         if (intent == null) {
+            Log.w(TAG, "No launch intent, killing process");
             Process.killProcess(Process.myPid());
             return;
         }
@@ -342,22 +428,25 @@ public class ModManagerUpdater {
         var pending = PendingIntent.getActivity(activity, 0, intent, flags);
         var alarm = (AlarmManager) activity.getSystemService(Context.ALARM_SERVICE);
         alarm.set(AlarmManager.RTC, System.currentTimeMillis() + 200, pending);
+        Log.i(TAG, "Alarm scheduled, killing process");
         Process.killProcess(Process.myPid());
     }
 
-    private static void updateDialog(AlertDialog d, String msg, int pct) {
-        mainHandler.post(() -> { if (d.isShowing()) d.setMessage(msg); });
+    private static void updateDialog (AlertDialog d, String msg,int pct){
+        mainHandler.post(() -> {
+            if (d.isShowing()) d.setMessage(msg);
+        });
     }
 
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // ──── JSON ────
 
-    private static String extractJsonString(String json, String key) {
+    private static String extractJsonString (String json, String key){
         return extractJsonString(json, key, null);
     }
 
-    private static String extractJsonString(String json, String key, String def) {
+    private static String extractJsonString (String json, String key, String def){
         var p = "\"" + key + "\"";
         int s = json.indexOf(p);
         if (s < 0) return def;
@@ -367,3 +456,4 @@ public class ModManagerUpdater {
         return e < 0 ? def : json.substring(s + 1, e);
     }
 }
+

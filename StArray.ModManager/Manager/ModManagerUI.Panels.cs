@@ -66,7 +66,7 @@ partial class ModManagerUI
             ImGui.Spacing();
             ImGui.Separator();
 
-            if (ImGui.Button(FontAwesome7.FloppyDisk + " " + L10n.Get("Btn.Save"), new Vector2(100, 0)))
+            if (ImGui.Button(FontAwesome7.FloppyDisk + " " + L10n.Get("Btn.Save")))
             {
                 SaveSettings(mod, settings);
             }
@@ -167,7 +167,7 @@ partial class ModManagerUI
             ImGui.Text(L10n.Get("AddMod_NotImplDetail"));
 
             ImGui.Spacing();
-            if (ImGui.Button(L10n.Get("Btn_Close"), new Vector2(100, 0)))
+            if (ImGui.Button(L10n.Get("Btn_Close")))
                 _showAddModPopup = false;
 
             ImGui.EndPopup();

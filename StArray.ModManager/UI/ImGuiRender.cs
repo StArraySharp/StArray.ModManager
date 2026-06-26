@@ -186,12 +186,11 @@ public static unsafe class ImGuiRender
     private static int _blendSrc, _blendDst;
     private static int _depthFunc;
     private static int _cullMode;
-    private static int _stencilFunc, _stencilOp;
+    private static int _stencilFunc;
     private static float _lineWidth = 1f, _pointSize = 1f;
     private static float _polyOffsetFactor = 1f, _polyOffsetUnits = 1f;
     private static Vector4 _clearColor = new(0.45f, 0.55f, 0.60f, 1.0f);
     private static bool _cbR, _cbG, _cbB, _cbA;
-    private static int _selectedTest;
 
     // GL info (refreshed each frame)
     private static string _glVendor = "", _glRenderer = "", _glVersion = "", _glExt = "";
@@ -199,7 +198,6 @@ public static unsafe class ImGuiRender
 
     // rainbow shader
     private static int _rainbowProg;
-    private static int _rainbowBgIdx;  // uniform: bg texture slot
     private static bool _rainbowReady;
     private static bool _rainbowActive;
     private static IntPtr _rbBindPtr, _rbUnbindPtr;

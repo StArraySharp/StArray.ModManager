@@ -9,6 +9,9 @@ namespace StArray.ModManager.UI;
 /// <summary>ImGui input handler / 输入处理器 — touch/key hooks + IME control</summary>
 public static class ImGuiInputHandler
 {
+    /// <summary>ImGui 上下文就绪后由渲染器设置</summary>
+    public static bool IsInitialized { get; set; }
+
     private static InitializeMotionEventDelegate s_initializeMotionEvent;
 
     private delegate int InitializeMotionEventDelegate(IntPtr self, IntPtr motionEvent, IntPtr message);
@@ -31,12 +34,14 @@ public static class ImGuiInputHandler
         // IME 字符回调：Java nativeSendChar → C → 此回调 → ImGui
         NativeFunctions.SetOnAcceptCharCallback(codepoint =>
         {
+            if (!IsInitialized) return;
             ImGui.GetIO().AddInputCharacter(codepoint);
         });
 
         // IME 特殊键回调：Java nativeSendKey → C → 此回调 → ImGui
         NativeFunctions.SetOnAcceptKeyCallback(keyCode =>
         {
+            if (!IsInitialized) return;
             var io = ImGui.GetIO();
             switch (keyCode)
             {
@@ -54,9 +59,9 @@ public static class ImGuiInputHandler
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnTouchEvent(IntPtr self, IntPtr motionEvent, IntPtr message)
     {
-        // 先调用原函数初始化 MotionEvent，再传给 ImGui
         int result = s_initializeMotionEvent(self, motionEvent, message);
-        ImGuiImplAndroid.HandleInputEvent(self);
+        if (IsInitialized)
+            ImGuiImplAndroid.HandleInputEvent(self);
         return result;
     }
 
@@ -65,6 +70,7 @@ public static class ImGuiInputHandler
 
     public static void UpdateIme()
     {
+        if (!IsInitialized) return;
         bool want = ImGui.GetIO().WantTextInput;
         if (want == s_wantTextInputLast) return;
         s_wantTextInputLast = want;
