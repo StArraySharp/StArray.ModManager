@@ -31,7 +31,9 @@ jobs:
 
       - name: Build AAR
         working-directory: Android
-        run: ./gradlew :library:assembleRelease
+        run: |
+          chmod +x gradlew
+          ./gradlew :library:assembleRelease
 
       - name: Upload AAR
         uses: actions/upload-artifact@v4
