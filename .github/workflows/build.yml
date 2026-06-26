@@ -3,7 +3,6 @@ name: Build
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
@@ -25,10 +24,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: |
-            platforms;android-35
-            ndk;27.2.12479018
-            build-tools;35.0.0
+          packages: 'platforms;android-35 ndk;27.2.12479018 build-tools;35.0.0'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -73,25 +69,3 @@ jobs:
         with:
           name: manager-release.zip
           path: manager-release.zip
-
-  # ──── Release (tag only) ────
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, manager]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: '*'
-          merge-multiple: true
-          path: artifacts
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/library-release.aar
-            artifacts/manager-release.zip
-          generate_release_notes: true
