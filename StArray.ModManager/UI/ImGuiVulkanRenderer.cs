@@ -17,13 +17,16 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
 
     private static ImGuiVulkanRenderer? s_instance;
 
+    /// <summary>渲染器单例（Install 之后可用）</summary>
     public static ImGuiVulkanRenderer Instance =>
         s_instance ?? throw new InvalidOperationException("Vulkan renderer not installed");
 
+    /// <summary>安装 Vulkan 渲染器</summary>
     public static bool Install() => (s_instance = new ImGuiVulkanRenderer()).InstallInstance();
 
     private static Action? s_pendingOnRender;
 
+    /// <summary>每帧渲染事件</summary>
     public static event Action OnRender
     {
         add
@@ -49,6 +52,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         remove => _onRender -= value;
     }
 
+    /// <summary>渲染器是否已初始化</summary>
     public bool IsInitialized => _initialized;
 
     bool IImGuiRenderer.Install() => InstallInstance();
@@ -261,6 +265,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
 
     // ===== Hook 回调 (UnmanagedCallersOnly) =====
 
+    /// <summary>vkCreateInstance Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnCreateInstance(IntPtr pCreateInfo, IntPtr pAllocator, IntPtr* pInstance)
     {
@@ -277,6 +282,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         return result;
     }
 
+    /// <summary>vkCreateDevice Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnCreateDevice(IntPtr physicalDevice, IntPtr pCreateInfo,
         IntPtr pAllocator, IntPtr* pDevice)
@@ -297,6 +303,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         return result;
     }
 
+    /// <summary>vkGetDeviceQueue Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void OnGetDeviceQueue(IntPtr device, uint queueFamilyIndex,
         uint queueIndex, IntPtr* pQueue)
@@ -315,6 +322,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         }
     }
 
+    /// <summary>vkQueuePresentKHR Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnQueuePresentKHR(IntPtr queue, IntPtr pPresentInfo)
     {

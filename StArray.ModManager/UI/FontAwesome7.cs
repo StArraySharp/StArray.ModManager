@@ -7,6 +7,7 @@
 
 namespace IconFonts
 {
+    /// <summary>Font Awesome 7 图标常量（自动生成，Unicode 私用区）</summary>
     public class FontAwesome7
     {
         public const string FontIconFileNameFAR = "fa-regular-400.woff2";

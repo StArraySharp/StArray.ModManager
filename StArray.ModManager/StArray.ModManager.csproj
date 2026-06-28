@@ -7,13 +7,13 @@
     <RootNamespace>StArray.ModManager</RootNamespace>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>embedded</DebugType>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="OpenTK.Graphics" Version="4.9.4" />
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
   </ItemGroup>

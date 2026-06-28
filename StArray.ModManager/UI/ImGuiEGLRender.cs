@@ -53,6 +53,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         remove => _onRender -= value;
     }
 
+    /// <summary>渲染器是否已初始化</summary>
     public bool IsInitialized => _initialized;
 
     /// <summary> 实例安装（实现 IImGuiRenderer） </summary>
@@ -266,8 +267,10 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
 /// </summary>
 public static class ImGuiEGLRender
 {
+    /// <summary>安装 EGL 渲染器</summary>
     public static bool Install() => ImGuiEGLRenderer.Install();
 
+    /// <summary>每帧渲染事件</summary>
     public static event Action OnRender
     {
         add => ImGuiEGLRenderer.OnRender += value;

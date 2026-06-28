@@ -10,13 +10,21 @@ using StArray.ModManager.UI;
 namespace StArray.ModManager;
 
 /// <summary>CoreCLR entry / 加载器入口 — called by native delegate</summary>
+/// <summary>CoreCLR 入口 / 加载器入口 — called by native delegate</summary>
 public static class Managed
 {
+    /// <summary>当前管理器 DLL 的完整路径</summary>
     public static string AssemblyPath = string.Empty;
+    private static StreamWriter? _logWriter;
+    private static readonly object _logLock = new();
+    /// <summary>原生入口，初始化 Logger 桥接、扫描 Mod、启动 ImGui</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int Entry(int argc, IntPtr argv)
     {
+        var totalSw = Stopwatch.StartNew();
+
         // 桥接 Logger → Android logcat
+        Benchmark.Begin();
         Logger.OnLog += (level, tag, msg) =>
         {
             var prio = level switch
@@ -29,15 +37,20 @@ public static class Managed
             };
             AndroidUtils.Write(prio, tag, msg);
         };
-        var sw = Stopwatch.StartNew();
+        Logger.Error($"{nameof(Managed)}-Benchmark", $"Logger bridge: {Benchmark.End():F3}s");
 
+        // 解析命令行参数
+        Benchmark.Begin();
         string[] args = new string[argc];
         for (int i = 0; i < argc; i++)
         {
             IntPtr pStr = Marshal.ReadIntPtr(argv, i * IntPtr.Size);
             args[i] = Marshal.PtrToStringUTF8(pStr)!;
         }
-        
+        Logger.Error($"{nameof(Managed)}-Benchmark", $"Args parse ({argc} args): {Benchmark.End():F3}s");
+
+        // 路径解析
+        Benchmark.Begin();
         string modsPath = args.Length > 0
             ? args[0]
             : Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "..", "mods");
@@ -45,15 +58,33 @@ public static class Managed
         if (!Directory.Exists(modsPath))
             Directory.CreateDirectory(modsPath);
 
+        // 文件日志 → manager 根目录（与 mods/、runtime/ 同级）
+        var rootDir = Path.GetDirectoryName(modsPath)!;
+        _logWriter = new StreamWriter(Path.Combine(rootDir, "manager.log"), append: true) { AutoFlush = true };
+        Logger.OnLog += (level, tag, msg) =>
+        {
+            lock (_logLock)
+                _logWriter?.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] [{tag}] {msg}");
+        };
 
+        Logger.Error($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
 
+        // 初始化
+        Benchmark.Begin();
         var loader = new ModLoader(modsPath);
+        Logger.Error($"{nameof(Managed)}-Benchmark", $"ModLoader init: {Benchmark.End():F3}s");
+
+        Benchmark.Begin();
         var ui = new ModManagerUI(loader);
+        Logger.Error($"{nameof(Managed)}-Benchmark", $"ModManagerUI init: {Benchmark.End():F3}s");
+
+        Benchmark.Begin();
         ImGuiEGLRender.OnRender += ui.Render;
         ImGuiEGLRender.Install();
+        Logger.Error($"{nameof(Managed)}-Benchmark", $"ImGui install: {Benchmark.End():F3}s");
 
-        sw.Stop();
-        Logger.Error(nameof(Managed), $"Startup completed in {sw.Elapsed.TotalSeconds:F3}s");
+        totalSw.Stop();
+        Logger.Error($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;
     }
 }

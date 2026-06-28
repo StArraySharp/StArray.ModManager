@@ -185,6 +185,29 @@ public class UnityResolve
             return ptr != IntPtr.Zero ? new Method(ptr) : null;
         }
 
+        /// <summary>按名称和参数类型名查找方法（遍历匹配）。</summary>
+        public Method? GetMethod(string name, params string[] paramTypes)
+        {
+            int count = MethodCount;
+            for (int i = 0; i < count; i++)
+            {
+                var m = GetMethodAt(i);
+                if (m == null || m.Name != name || m.ParamCount != paramTypes.Length)
+                    continue;
+                bool match = true;
+                for (int j = 0; j < paramTypes.Length; j++)
+                {
+                    if (m.GetParamTypeName(j) != paramTypes[j])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return m;
+            }
+            return null;
+        }
+
         /// <summary>按名称查找字段。</summary>
         public Field? GetField(string name)
         {
@@ -268,6 +291,10 @@ public class UnityResolve
         /// <summary>按索引获取参数名。</summary>
         public string GetParamName(int index)
             => ReadAnsiString(_NativeMethodGetParamName(_ptr, index));
+
+        /// <summary>按索引获取参数类型名。</summary>
+        public string GetParamTypeName(int index)
+            => ReadAnsiString(_NativeMethodGetParamTypeName(_ptr, index));
 
         /// <summary>返回类型名。</summary>
         public string ReturnTypeName => ReadAnsiString(_NativeMethodGetReturnTypeName(_ptr));
@@ -540,6 +567,9 @@ public class UnityResolve
 
     [DllImport(Lib, EntryPoint = "modmanager_resolve_method_get_param_name")]
     private static extern nint _NativeMethodGetParamName(nint method, int index);
+
+    [DllImport(Lib, EntryPoint = "modmanager_resolve_method_get_param_type_name")]
+    private static extern nint _NativeMethodGetParamTypeName(nint method, int index);
 
     [DllImport(Lib, EntryPoint = "modmanager_resolve_class_get_method_count")]
     private static extern int _NativeClassGetMethodCount(nint klass);

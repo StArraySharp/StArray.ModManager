@@ -246,6 +246,16 @@ const char *modmanager_resolve_method_get_param_name(void *method, int index) {
 }
 
 /**
+ * 获取方法参数类型名（按索引）。
+ */
+const char *modmanager_resolve_method_get_param_type_name(void *method, int index) {
+    if (!method) return "";
+    auto *m = static_cast<UnityResolve::Method*>(method);
+    if (index < 0 || index >= (int)m->args.size()) return "";
+    return m->args[index]->pType ? m->args[index]->pType->name.c_str() : "";
+}
+
+/**
  * 获取方法返回类型名。
  */
 const char *modmanager_resolve_method_get_return_type_name(void *method) {

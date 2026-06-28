@@ -10,6 +10,7 @@ public class ModLoader
     private readonly List<ModEntry> _mods = new();
     private readonly string _modsDirectory;
 
+    /// <summary>已发现的 Mod 列表（只读）</summary>
     public IReadOnlyList<ModEntry> Mods => _mods.AsReadOnly();
     /// <summary>Mods 目录路径</summary>
     public string ModsDirectory
@@ -18,8 +19,10 @@ public class ModLoader
         set => throw new NotSupportedException("ModsDirectory is set via constructor only");
     }
 
+    /// <summary>Mod 状态变更事件</summary>
     public event Action<ModEntry>? OnModStateChanged;
 
+    /// <summary>创建 ModLoader 并指定 Mods 目录</summary>
     public ModLoader(string modsDirectory)
     {
         _modsDirectory = modsDirectory;
@@ -61,7 +64,6 @@ public class ModLoader
             }
         }
 
-        // 保持发现顺序
         Logger.Info(nameof(ModLoader), L10n.Get("Log_ModCount", _mods.Count));
     }
 
@@ -128,7 +130,7 @@ public class ModLoader
 
         try
         {
-    
+            // 依赖检查
             foreach (var depId in mod.Dependencies)
             {
                 var dep = _mods.FirstOrDefault(m => m.Id == depId);
@@ -149,7 +151,6 @@ public class ModLoader
                 var assembly = Assembly.LoadFrom(mod.EntryPoint);
                 Logger.Info(nameof(ModLoader), $"{mod.Name} 程序集已加载: {assembly.GetName().Name}");
 
-
                 var pluginType = assembly.GetTypes()
                     .FirstOrDefault(t => typeof(IModPlugin).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
 
@@ -159,7 +160,6 @@ public class ModLoader
                     mod.PluginInstance = plugin;
                     plugin.OnLoad();
 
-
                     if (plugin is IModSettings s)
                         ModManagerUI.LoadSettings(mod, s);
 
@@ -168,7 +168,6 @@ public class ModLoader
             }
             else
             {
-
                 Logger.Info(nameof(ModLoader), $"{mod.Name} 无入口程序集，作为数据 Mod 加载");
             }
 

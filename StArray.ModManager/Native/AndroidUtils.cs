@@ -121,4 +121,58 @@ public static class AndroidUtils
         JniHelperNative.DeleteLocalRef(surface);
         return _cachedNativeWindow;
     }
+
+    /// <summary>
+    /// 获取 /data/data/{package}/files 私有目录（内部存储）
+    /// </summary>
+    public static string? GetInternalFilesDir()
+    {
+        var context = JniHelperNative.GetCurrentActivity();
+        if (context == IntPtr.Zero) return null;
+        return GetDirFromContext(context, "getFilesDir", "()Ljava/io/File;");
+    }
+
+    /// <summary>
+    /// 获取 /storage/emulated/0/Android/data/{package}/files 私有目录（外部存储）
+    /// </summary>
+    public static string? GetExternalFilesDir()
+    {
+        var context = JniHelperNative.GetCurrentActivity();
+        if (context == IntPtr.Zero) return null;
+        return GetDirFromContext(context, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;", null);
+    }
+
+    private static string? GetDirFromContext(IntPtr context, string methodName, string sig, string? arg = null)
+    {
+        try
+        {
+            using var ctxObj = new JavaObject(context);
+            using var ctxCls = ctxObj.GetClass();
+            var methodId = JniHelperNative.GetMethodID(ctxCls.Handle, methodName, sig);
+
+            IntPtr file;
+            if (arg != null)
+            {
+                var jArg = JniHelperNative.NewString(arg);
+                file = ctxObj.CallObjectMethod1(methodId, jArg);
+                JniHelperNative.DeleteLocalRef(jArg);
+            }
+            else
+            {
+                file = ctxObj.CallObjectMethod0(methodId);
+            }
+
+            if (file == IntPtr.Zero) return null;
+
+            using var fileObj = new JavaObject(file);
+            using var fileCls = fileObj.GetClass();
+            var getPath = JniHelperNative.GetMethodID(fileCls.Handle, "getAbsolutePath", "()Ljava/lang/String;");
+            var pathStr = fileObj.CallObjectMethod0(getPath);
+
+            var result = JniHelperNative.GetString(pathStr);
+            JniHelperNative.DeleteLocalRef(pathStr);
+            return result;
+        }
+        catch (Exception ex) { Error("AndroidUtils", $"GetDirFromContext({methodName}): {ex}"); return null; }
+    }
 }

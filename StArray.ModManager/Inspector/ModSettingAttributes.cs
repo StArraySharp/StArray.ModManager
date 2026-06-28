@@ -14,7 +14,9 @@ public class ModSettingIgnoreAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
 public class ModSettingLabelAttribute : Attribute
 {
+    /// <summary>显示名称</summary>
     public string Label { get; }
+    /// <summary>指定字段显示名称</summary>
     public ModSettingLabelAttribute(string label) => Label = label;
 }
 
@@ -24,7 +26,9 @@ public class ModSettingLabelAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
 public class ModSettingRangeAttribute : Attribute
 {
+    /// <summary>范围最小值</summary>
     public float Min { get; }
+    /// <summary>范围最大值</summary>
     public float Max { get; }
     /// <summary>最小值数组（Vec 多分量模式）</summary>
     public float[]? Mins { get; }
@@ -53,7 +57,9 @@ public class ModSettingRangeAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
 public class ModSettingLabelSideAttribute : Attribute
 {
+    /// <summary>标签位置</summary>
     public ModInspector.LabelSide Side { get; }
+    /// <summary>指定字段标签位置</summary>
     public ModSettingLabelSideAttribute(ModInspector.LabelSide side) => Side = side;
 }
 

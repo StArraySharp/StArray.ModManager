@@ -24,8 +24,10 @@ public static unsafe class ImGuiRender
     delegate int InitializeMotionEventDelegate(IntPtr self, IntPtr motionEvent, IntPtr message);
     delegate int InitializeKeyEventDelegate(IntPtr self, IntPtr keyEvent, IntPtr message);
 
+    /// <summary>每帧渲染事件</summary>
     public static event Action OnRender = () => { };
     
+    /// <summary>eglSwapBuffers Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnSwapBuffers(IntPtr display, IntPtr surface)
     {
@@ -62,9 +64,10 @@ public static unsafe class ImGuiRender
         return _prevSwapBuffersDelegate!(display, surface);
     }
 
+    /// <summary>安装 Hook 并初始化 ImGui</summary>
     public static bool Install()
     {
-        var eglLib = DL.dlopen("libEgl.so", DL.Flags.RTLD_GLOBAL);
+        var eglLib = DL.dlopen("libEGL.so", DL.Flags.RTLD_GLOBAL);
         if (eglLib == IntPtr.Zero)
         {
             eglLib = DL.dlopen("libGLESv3.so", DL.Flags.RTLD_GLOBAL);
@@ -80,26 +83,28 @@ public static unsafe class ImGuiRender
             out var origin);
         _initializeMotionEvent = Marshal.GetDelegateForFunctionPointer<InitializeMotionEventDelegate>(origin);
         
-        // Hook 按键事件
+        /*// Hook 按键事件
         string keySymbol = "_ZN7android13InputConsumer18initializeKeyEventEPNS_8KeyEventEPKNS_12InputMessageE";
         IntPtr keyAddr = Dobby.SymbolResolver("libinput.so", keySymbol);
         Dobby.Hook(keyAddr, typeof(ImGuiRender).GetMethod(nameof(OnKeyEvent))!.MethodHandle.GetFunctionPointer(),
             out var keyOrigin);
         _initializeKeyEvent = Marshal.GetDelegateForFunctionPointer<InitializeKeyEventDelegate>(keyOrigin);
+        */
         
         Logger.Error(nameof(ImGuiRender), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
         return true;
     }
 
+    /// <summary>触摸事件 Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnTouchEvent(IntPtr self, IntPtr motionEvent, IntPtr message)
     {
-        // 先调用原函数初始化 MotionEvent，再传给 ImGui
         int result = _initializeMotionEvent(self, motionEvent, message);
         ImGuiImplAndroid.HandleInputEvent(self);
         return result;
     }
 
+    /// <summary>按键事件 Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnKeyEvent(IntPtr self, IntPtr keyEvent, IntPtr message)
     {

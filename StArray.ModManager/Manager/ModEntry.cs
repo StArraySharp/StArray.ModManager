@@ -43,6 +43,7 @@ public class ModEntry
     /// <summary>已加载的插件实例（供 UI 调用 OnGui）</summary>
     public IModPlugin? PluginInstance { get; set; }
 
+    /// <summary>格式化显示：Name vVersion</summary>
     public override string ToString() => $"{Name} v{Version}";
 }
 

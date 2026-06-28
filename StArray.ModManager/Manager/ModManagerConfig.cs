@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Newtonsoft.Json;
 
 namespace StArray.ModManager.Manager;
 
@@ -25,16 +24,15 @@ public class ModManagerConfig
 
     private const string FileName = "modmanager_config.json";
 
-    /// <summary>保存到指定目录（System.Text.Json）</summary>
+    /// <summary>保存到指定目录（源生成器）</summary>
     public void Save(string directory)
     {
         var path = Path.Combine(directory, FileName);
-        var json = System.Text.Json.JsonSerializer.Serialize(this,
-            new System.Text.Json.JsonSerializerOptions { WriteIndented = true, IncludeFields = true });
+        var json = JsonSerializer.Serialize(this, ModManagerJsonContext.Default.ModManagerConfig);
         File.WriteAllText(path, json);
     }
 
-    /// <summary>从指定目录加载（Newtonsoft.Json），失败返回默认</summary>
+    /// <summary>从指定目录加载（源生成器），失败返回默认</summary>
     public static ModManagerConfig Load(string directory)
     {
         var path = Path.Combine(directory, FileName);
@@ -43,7 +41,7 @@ public class ModManagerConfig
             if (File.Exists(path))
             {
                 var json = File.ReadAllText(path);
-                return JsonConvert.DeserializeObject<ModManagerConfig>(json)
+                return JsonSerializer.Deserialize(json, ModManagerJsonContext.Default.ModManagerConfig)
                     ?? new ModManagerConfig();
             }
         }

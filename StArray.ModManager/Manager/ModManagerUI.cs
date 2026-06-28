@@ -28,6 +28,7 @@ public partial class ModManagerUI
 
     private bool _configApplied;
 
+    /// <summary>初始化 UI，加载配置并扫描 Mod</summary>
     public ModManagerUI(ModLoader modManager)
     {
         _modManager = modManager;
@@ -120,10 +121,27 @@ public partial class ModManagerUI
             ApplyConfig();
             _configApplied = true;
         }
+
+        // 背景层：每个 Mod 在 ImGui 窗口下方绘制
+        var bgDrawList = ImGui.GetBackgroundDrawList();
+        foreach (var mod in _modManager.Mods)
+        {
+            if (mod is { LoadState: ModLoadState.Loaded, PluginInstance: not null })
+                mod.PluginInstance.OnBackgroundGUI(bgDrawList);
+        }
+
         RenderMainWindow();
         RenderModSettingsWindow();
         RenderAddModPopup();
         RenderToast();
+
+        // 前景层：每个 Mod 在 ImGui 窗口上方绘制
+        var fgDrawList = ImGui.GetForegroundDrawList();
+        foreach (var mod in _modManager.Mods)
+        {
+            if (mod is { LoadState: ModLoadState.Loaded, PluginInstance: not null })
+                mod.PluginInstance.OnForegroundGUI(fgDrawList);
+        }
     }
 
     private void RenderMainWindow()

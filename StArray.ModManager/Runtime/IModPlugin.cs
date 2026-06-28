@@ -1,3 +1,5 @@
+using ImGuiNET;
+
 namespace StArray.ModManager.Runtime;
 
 /// <summary>
@@ -28,4 +30,10 @@ public interface IModPlugin
 
     /// <summary>Mod 卸载时调用</summary>
     void OnUnload();
+
+    /// <summary>背景层绘制（ImGui 窗口下方、游戏画面之上），可用于水印等</summary>
+    void OnBackgroundGUI(ImDrawListPtr drawList) { }
+
+    /// <summary>前景层绘制（ImGui 窗口上方），可用于 FPS 等全局 HUD</summary>
+    void OnForegroundGUI(ImDrawListPtr drawList) { }
 }

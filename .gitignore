@@ -8,6 +8,9 @@
 *.aab
 *.ap_
 
+# Release artifacts
+/release/
+
 # IDE
 .idea/
 *.suo

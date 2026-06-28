@@ -87,8 +87,7 @@ partial class ModManagerUI
             var dict = new Dictionary<string, object?>();
             foreach (var f in fields)
                 dict[f.Name] = f.GetValue(settings);
-            var json = JsonSerializer.Serialize(dict,
-                new JsonSerializerOptions { WriteIndented = true, IncludeFields = true });
+            var json = JsonSerializer.Serialize(dict, ModManagerJsonContext.Default.DictionaryStringObject);
             File.WriteAllText(path, json);
             _toastMessage = FontAwesome7.CircleCheck + " " + L10n.Get("Toast.ModSaved", mod.Name);
             _toastTimer = 2.5f;
@@ -110,7 +109,7 @@ partial class ModManagerUI
             if (!File.Exists(path)) return;
 
             var json = File.ReadAllText(path);
-            var dict = JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(json);
+            var dict = JsonSerializer.Deserialize(json, ModManagerJsonContext.Default.DictionaryStringJsonElement);
             if (dict == null) return;
 
             var type = settings.GetType();

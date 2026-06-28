@@ -252,8 +252,14 @@ partial class ModInspector
         return type.IsValueType;
     }
 
+    /// <summary>标签相对于控件的摆放位置</summary>
     public enum LabelSide
     {
-        Top,Left,Right
+        /// <summary>标签在上方</summary>
+        Top,
+        /// <summary>标签在左侧</summary>
+        Left,
+        /// <summary>标签在右侧</summary>
+        Right
     }
 }

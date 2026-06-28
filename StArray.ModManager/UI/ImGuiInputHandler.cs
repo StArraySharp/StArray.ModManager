@@ -56,6 +56,7 @@ public static class ImGuiInputHandler
         Logger.Info(nameof(ImGuiInputHandler), "Input hooks installed");
     }
 
+    /// <summary>触摸事件 Hook 回调</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnTouchEvent(IntPtr self, IntPtr motionEvent, IntPtr message)
     {
@@ -68,6 +69,7 @@ public static class ImGuiInputHandler
     private static JavaClass? s_utilsClass;
     private static nint s_showKeyboardMethod;
 
+    /// <summary>根据 ImGui 文本输入状态切换软键盘</summary>
     public static void UpdateIme()
     {
         if (!IsInitialized) return;

@@ -13,45 +13,32 @@ Android IL2CPP Unity mod manager with CoreCLR runtime embedding and ImGui overla
 ## Project Structure
 
 ```
-StArray.ModManager/          C# mod manager (.NET 10)
-  UI/
-    ImGuiRender.cs           EGL rendering + GL debug panel + rainbow shader
-    ImGuiEGLRender.cs        EGL renderer (IImGuiRenderer, split architecture)
-    ImGuiInputHandler.cs     Touch/key hooks + IME callback bridge
-    ImGuiVulkanRenderer.cs   Vulkan renderer (experimental)
-    ModManagerUI.cs          ImGui mod manager UI
-    IImGuiRenderer.cs        Renderer interface
-    FontAwesome7.cs          FA7 icon codepoints
-  PInvoke/
-    Dobby.cs                 Inline hook wrapper
-    DL.cs                    dlopen/dlsym
-    JniHelperNative.cs       JNI ↔ C data bridge
-    ImGuiBackends.cs         cimgui P/Invoke (OpenGL3, Android, Vulkan)
-    Misc.cs                  C callback registration
-    AndroidLog.cs            Logcat logging
-    UnityResolve.cs          IL2CPP reflection engine
-  Manager/
-    MotionEventHook.cs       InputConsumer hook
-    AndroidIME.cs            IME manager
-  Unity/
-    UnitySurfaceHelper.cs    ANativeWindow from Unity SurfaceView
-  Mono.cs                    CoreCLR entry point (old)
-  Managed.cs                 CoreCLR entry with argc/argv
+StArray.ModManager/              C# mod manager (.NET 10)
+  Managed.cs                     CoreCLR entry – Logger桥接 → 扫描Mod → 启动ImGui
+  Il2Cpp/                        IL2CPP 内部类型 C# 翻译
+    Core.cs / Types.cs           Vector2/3/4, Quaternion, Il2CppString, Il2CppArray<T> 等
+    Reflection.cs                Il2CppAssembly, Il2CppClass, Il2CppMethod, Il2CppField
+    Unity.cs                     UnityObject, Component, Transform, GameObject, Camera
+    Coroutine.cs
+  Inspector/                     ImGui 自动检查器 + 设置特性（[ModSettingRange] 等）
+  Manager/                       核心逻辑
+    ModLoader.cs                 Mod 扫描/加载/卸载/状态管理
+    ModManagerUI.cs              ImGui 主面板 + 设置窗口 + Overlay 背景/前景渲染
+    ModManagerConfig.cs          全局配置 JSON 持久化（STJ 源生成）
+    Logger.cs                    统一日志 → logcat + 文件双写
+    Benchmark.cs                 栈式嵌套计时
+  Native/                        原生绑定（Dobby, DL, JNI, AndroidUtils, UnityResolve）
+  Runtime/                       Mod 接口
+    IModPlugin.cs                OnLoad/OnUnload/OnBackgroundGUI/OnForegroundGUI
+    IModSettings.cs / IModSettingCustomDraw.cs
+  UI/                            ImGui EGL/Vulkan 渲染器 + 输入处理 + FA7 图标
 
-Android/library/             Native library (libmodmanager.so)
-  src/main/cpp/core/
-    dobby_hook.cpp           Dobby inline hook
-    mono_droid_coreclr.c     CoreCLR embedding + args delegate
-    jni_helper.c             JNI helpers, data bridge, C callback dispatch
-    unity_resolve.cpp        Unity symbol resolution
+Android/library/                 原生库 (libmodmanager.so)
+  src/main/cpp/core/             Dobby hook / CoreCLR 嵌入 / JNI helper / UnityResolve
   src/main/java/
-    MonoRunner.java          CoreCLR launcher (supports args)
-    ModManagerUtils.java     KeyboardView IME + InputConnection bridge
-
-Android/launcher/            Smali launcher module
-  src/main/smali/            ModManager.smali, ModManager$1.smali
-
-TestAndroidProject/          Test Unity app (IL2CPP, arm64-v8a)
+    ModManager.java              CoreCLR 启动器
+    ModManagerUpdater.java       OTA 自动更新（CompletableFuture + AlertDialog）
+    ModManagerUtils.java         IME KeyboardView + InputConnection
 ```
 
 ## Features
@@ -59,12 +46,15 @@ TestAndroidProject/          Test Unity app (IL2CPP, arm64-v8a)
 - **EGL SwapBuffers hook** with Dobby — renders ImGui overlay every frame
 - **Touch & key input** via InputConsumer hooks + cimgui Android backend
 - **IME support** (Chinese/Japanese) via custom KeyboardView + InputConnection bridge
-- **C→C# callback pipeline** — Java `commitText` → native `nativeSendChar` → C# `AddInputCharacter` in real time
-- **GL debug panel** — caps toggles (depth, blend, cull, etc.), blend/depth func selectors, GL state queries, viewport info
-- **Rainbow text shader** — custom GLSL shader applied via ImDrawList callbacks
+- **Mod system** — scan/load/unload with dependency resolution + auto-enable on restart
+- **Mod overlay API** — `OnBackgroundGUI` / `OnForegroundGUI` for direct game-screen drawing
+- **Auto-update** — OTA version check + download + SHA-256 verification + restart
+- **Config persistence** — STJ source-gen JSON, AOT-compatible
+- **File logging** — dual-write to logcat + `manager.log`
+- **GL debug panel** — caps toggles, blend/depth func selectors, GL state queries
 - **FontAwesome 7** icon support via embedded resource
 - **IImGuiRenderer** interface — swap between EGL, Vulkan backends
-- **CoreCLR args** — pass `string[]` from Java `MonoRunner.run()` to managed `Entry(int, IntPtr)`
+- **CoreCLR args** — pass `string[]` from Java to managed `Entry(int, IntPtr)`
 
 ## Build
 

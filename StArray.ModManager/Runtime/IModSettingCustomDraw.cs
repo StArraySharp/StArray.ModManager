@@ -5,5 +5,6 @@ namespace StArray.ModManager.Runtime;
 /// </summary>
 public interface IModSettingCustomDraw
 {
+    /// <summary>在检查器中绘制自定义 UI</summary>
     void DrawInspector();
 }

@@ -5,5 +5,6 @@ namespace StArray.ModManager.Runtime;
 /// </summary>
 public interface IModSettings
 {
+    /// <summary>绘制 Mod 专属设置面板</summary>
     void OnGui();
 }
