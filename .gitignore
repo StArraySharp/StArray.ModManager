@@ -32,10 +32,7 @@ Thumbs.db
 *.jks
 
 # Native libs (built from source or copied)
-*.so
-!**/libs/**/*.so
-!**/jniLibs/**/*.so
-
+jniLibs
 # NuGet / .NET
 **/packages/
 *.nupkg
