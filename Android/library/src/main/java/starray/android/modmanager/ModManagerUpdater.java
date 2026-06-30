@@ -1,14 +1,15 @@
 package starray.android.modmanager;
 
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.app.AlertDialog;
-import android.app.PendingIntent;
-import android.content.Context;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.util.Log;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.annotation.JSONField;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -39,10 +40,12 @@ import java.util.zip.ZipInputStream;
 public class ModManagerUpdater {
 
     private static final String TAG = "ModManagerUpdater";
+    private static final String PROXY_URL = "https://gh-proxy.org/";
 
     private final Activity activity;
     private String versionJsonUrl;
     private Path basePath;
+    private boolean useProxy = true;
 
     public static ModManagerUpdater create(Activity activity) {
         return new ModManagerUpdater(activity);
@@ -64,6 +67,12 @@ public class ModManagerUpdater {
 
     public ModManagerUpdater basePath(Path path) {
         this.basePath = path;
+        return this;
+    }
+
+    /** 是否在下载时使用 gh-proxy 代理（默认 true） */
+    public ModManagerUpdater useProxy(boolean useProxy) {
+        this.useProxy = useProxy;
         return this;
     }
 
@@ -92,7 +101,7 @@ public class ModManagerUpdater {
         VersionInfo localVersion = null;
         try {
             if (Files.exists(localDll) && Files.exists(localVerFile)) {
-                localVersion = parseVersionJson(new String(Files.readAllBytes(localVerFile)));
+                localVersion = JSON.parseObject(new String(Files.readAllBytes(localVerFile)), VersionInfo.class);
                 Log.i(TAG, "Local version: " + localVersion.version + " (code=" + localVersion.versionCode + ")");
             } else {
                 Log.i(TAG, "No local manager found");
@@ -170,6 +179,15 @@ public class ModManagerUpdater {
     }
 
     private void showDownloadDialog(VersionInfo remote, Path mgr, Path rt, Path mods, boolean hasLocal, boolean useNewThread) {
+        if (hasLocal) {
+            // 删除本地 version.json，确保更新失败时不会误认为已有可用版本
+            try {
+                Files.deleteIfExists(mgr.resolve("version.json"));
+                Log.i(TAG, "Deleted local version.json before update");
+            } catch (IOException e) {
+                Log.w(TAG, "Failed to delete local version.json: " + e.getMessage());
+            }
+        }
         Log.i(TAG, "Starting download: url=" + remote.managerUrl + " target=" + mgr);
         var dialog = new AlertDialog.Builder(activity)
                 .setTitle(hasLocal ? "更新中" : "下载中")
@@ -248,9 +266,8 @@ public class ModManagerUpdater {
             clearDirectory(targetDir.toFile());
             unzip(zipFile, targetDir);
 
-            var marker = "{\"version\":\"" + version.version +
-                    "\",\"versionCode\":" + version.versionCode + "}";
-            Files.write(targetDir.resolve("version.json"), marker.getBytes());
+            Files.write(targetDir.resolve("version.json"),
+                    JSON.toJSONBytes(version));
 
             Files.delete(zipFile);
             Log.i(TAG, "Manager installed successfully");
@@ -288,40 +305,35 @@ public class ModManagerUpdater {
     }
     // ──── 远程版本 ────
 
-    private VersionInfo fetchVersionJson () {
+    private VersionInfo fetchVersionJson() {
         try {
             var json = httpGetString(versionJsonUrl);
-            return parseVersionJson(json);
+            return JSON.parseObject(json, VersionInfo.class);
         } catch (IOException e) {
             Log.e(TAG, "Failed to fetch version.json: " + e.getMessage(), e);
             throw new UncheckedIOException(e);
         }
     }
 
-    private static class VersionInfo {
-        String version;
-        int versionCode;
-        String managerUrl;
-        String sha256;
-    }
-
-    private static VersionInfo parseVersionJson (String json){
-        var v = new VersionInfo();
-        v.version = extractJsonString(json, "version");
-        try {
-            v.versionCode = Integer.parseInt(extractJsonString(json, "versionCode", "0"));
-        } catch (NumberFormatException e) {
-            v.versionCode = 0;
-        }
-        v.managerUrl = extractJsonString(json, "manager");
-        v.sha256 = extractJsonString(json, "sha256", "");
-        return v;
+    public static class VersionInfo {
+        @JSONField(name = "version")
+        public String version;
+        @JSONField(name = "versionCode")
+        public int versionCode;
+        @JSONField(name = "manager")
+        public String managerUrl;
+        @JSONField(name = "sha256")
+        public String sha256;
     }
 
     // ──── HTTP ────
 
-    private static String httpGetString (String urlStr) throws IOException {
-        var conn = openConnection(urlStr, 15_000, 15_000);
+    private String proxyUrl(String url) {
+        return useProxy ? PROXY_URL + url : url;
+    }
+
+    private String httpGetString(String urlStr) throws IOException {
+        var conn = openConnection(proxyUrl(urlStr), 15_000, 15_000);
         try (var in = conn.getInputStream();
              var out = new java.io.ByteArrayOutputStream()) {
             byte[] buf = new byte[4096];
@@ -338,10 +350,11 @@ public class ModManagerUpdater {
         void onProgress(int percent);
     }
 
-    private static void downloadFile (String urlStr, Path dest, ProgressCallback cb) throws
+    private void downloadFile(String urlStr, Path dest, ProgressCallback cb) throws
             IOException {
-        Log.i(TAG, "Downloading " + urlStr);
-        var conn = openConnection(urlStr, 30_000, 120_000);
+        var realUrl = proxyUrl(urlStr);
+        Log.i(TAG, "Downloading " + realUrl);
+        var conn = openConnection(realUrl, 30_000, 120_000);
         int cl = conn.getContentLength();
         Log.i(TAG, "Content-Length: " + cl);
         try (var in = new BufferedInputStream(conn.getInputStream());
@@ -415,7 +428,7 @@ public class ModManagerUpdater {
 
     // ──── 重启 ────
 
-    private void restartApp () {
+    private void restartApp() {
         Log.i(TAG, "Restarting app...");
         var intent = activity.getPackageManager()
                 .getLaunchIntentForPackage(activity.getPackageName());
@@ -424,12 +437,10 @@ public class ModManagerUpdater {
             Process.killProcess(Process.myPid());
             return;
         }
-        int flags = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE;
-        var pending = PendingIntent.getActivity(activity, 0, intent, flags);
-        var alarm = (AlarmManager) activity.getSystemService(Context.ALARM_SERVICE);
-        alarm.set(AlarmManager.RTC, System.currentTimeMillis() + 200, pending);
-        Log.i(TAG, "Alarm scheduled, killing process");
-        Process.killProcess(Process.myPid());
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        activity.startActivity(intent);
+        activity.finishAffinity();
+        Runtime.getRuntime().exit(0);
     }
 
     private static void updateDialog (AlertDialog d, String msg,int pct){
@@ -439,21 +450,5 @@ public class ModManagerUpdater {
     }
 
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    // ──── JSON ────
-
-    private static String extractJsonString (String json, String key){
-        return extractJsonString(json, key, null);
-    }
-
-    private static String extractJsonString (String json, String key, String def){
-        var p = "\"" + key + "\"";
-        int s = json.indexOf(p);
-        if (s < 0) return def;
-        s = json.indexOf('"', s + p.length());
-        if (s < 0) return def;
-        int e = json.indexOf('"', s + 1);
-        return e < 0 ? def : json.substring(s + 1, e);
-    }
 }
 

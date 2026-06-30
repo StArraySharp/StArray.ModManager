@@ -112,14 +112,6 @@ target_link_libraries(modmanager
     android
 )
 
-# ---- Post-build: copy libcimgui.so alongside libmodmanager.so ----
-add_custom_command(TARGET modmanager POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:cimgui>"
-        "$<TARGET_FILE_DIR:modmanager>/libcimgui.so"
-    COMMENT "Copying libcimgui.so to modmanager output"
-)
-
 # ---- Link libraries (monodroid) ----
 target_link_libraries(monodroid
     ${log-lib}

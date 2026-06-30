@@ -33,6 +33,7 @@ Thumbs.db
 
 # Native libs (built from source or copied)
 jniLibs
+
 # NuGet / .NET
 **/packages/
 *.nupkg
