@@ -288,12 +288,41 @@ public class ModManagerUpdater {
                     Files.createDirectories(mods);
                     Log.i(TAG, "Created mods directory: " + mods);
                 }
+
+                // 从 version.json 读取入口配置，不存在则用默认值
+                var verFile = mgr.resolve("version.json");
+                String dll = "StArray.ModManager.dll";
+                String type = "StArray.ModManager.Managed";
+                String method = "Entry";
+                if (Files.exists(verFile)) {
+                    try {
+                        var localVer = JSON.parseObject(
+                                new String(Files.readAllBytes(verFile)), VersionInfo.class);
+                        if (localVer.entryAssembly != null && !localVer.entryAssembly.isEmpty())
+                            dll = localVer.entryAssembly;
+                        if (localVer.entryMethod != null && !localVer.entryMethod.isEmpty()) {
+                            // 格式："TypeName::MethodName" → type, method
+                            var parts = localVer.entryMethod.split("::", 2);
+                            if (parts.length == 2) {
+                                type = parts[0].trim();
+                                method = parts[1].trim();
+                            } else {
+                                // 单值当作方法名，类型取默认
+                                method = localVer.entryMethod.trim();
+                            }
+                        }
+                        Log.i(TAG, "Entry from version.json: " + dll + " → " + type + "::" + method);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to parse version.json for entry config, using defaults", e);
+                    }
+                } else {
+                    Log.i(TAG, "No version.json, using default entry: " + dll + " → " + type + "::" + method);
+                }
+
                 new ModManager()
                         .dotnetRoot(rt.toString())
                         .addAssemblyDir(mgr.toAbsolutePath().toString())
-                        .start("StArray.ModManager.dll",
-                                "StArray.ModManager.Managed", "Entry",
-                                mods.toAbsolutePath().toString());
+                        .start(dll, type, method, mods.toAbsolutePath().toString());
                 Log.i(TAG, "ModManager started");
             } catch (IOException e) {
                 Log.e(TAG, "Failed to create mods directory: " + e.getMessage(), e);
@@ -324,6 +353,12 @@ public class ModManagerUpdater {
         public String managerUrl;
         @JSONField(name = "sha256")
         public String sha256;
+        /** 入口程序集文件名（如 "StArray.ModManager.dll"） */
+        @JSONField(name = "entryAssembly")
+        public String entryAssembly;
+        /** 入口类型与方法（如 "StArray.ModManager.Managed::Entry"） */
+        @JSONField(name = "entryMethod")
+        public String entryMethod;
     }
 
     // ──── HTTP ────

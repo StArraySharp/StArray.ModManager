@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="6.0.4"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0"/>
+        <PackageReference Include="NUnit" Version="4.3.2"/>
+        <PackageReference Include="NUnit.Analyzers" Version="4.7.0"/>
+        <PackageReference Include="NUnit3TestAdapter" Version="5.0.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="NUnit.Framework"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\StArray.ModManager.Windows\StArray.ModManager.Windows.csproj" />
+        <ProjectReference Include="..\StArray.ModManager\StArray.ModManager.csproj" />
+        <ProjectReference Include="..\StArray.ModManager.SourceGenerator\StArray.ModManager.SourceGenerator.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+    <!-- ─── GCC 编译 test_native.c → test_native.dll ─── -->
+    <Target Name="BuildNativeTestDll" BeforeTargets="BeforeBuild">
+        <PropertyGroup>
+            <NativeSource>$(MSBuildProjectDirectory)\native\test_native.c</NativeSource>
+            <NativeOutput>$(OutputPath)test_native.dll</NativeOutput>
+            <_Gcc>gcc</_Gcc>
+        </PropertyGroup>
+        <Exec Command="&quot;$(_Gcc)&quot; -shared -O2 -Wall -Werror -o &quot;$(NativeOutput)&quot; &quot;$(NativeSource)&quot;"
+              ConsoleToMSBuild="true" />
+        <Message Text="test_native.dll compiled" Importance="high" />
+    </Target>
+
+</Project>

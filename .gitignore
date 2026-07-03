@@ -42,9 +42,10 @@ project.lock.json
 # Rider
 **/rider.project.restore.info
 
-# Unity test project (exclude entire dir)
+# test project (exclude entire dir)
 TestAndroidProject/
 TestAndroidProject2/
+dx12app/
 
 # Runtime data (mods, etc — user-managed)
 /Runtime/

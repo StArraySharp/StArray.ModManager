@@ -29,12 +29,12 @@ public partial class ModManagerUI
     private bool _configApplied;
 
     /// <summary>初始化 UI，加载配置并扫描 Mod</summary>
-    public ModManagerUI(ModLoader modManager)
+    public ModManagerUI(ModLoader modManager, string configDir)
     {
         _modManager = modManager;
         Logger.OnLog += OnLogMessage;
 
-        _configDir = Path.GetDirectoryName(Managed.AssemblyPath)!;
+        _configDir = configDir;
         _config = ModManagerConfig.Load(_configDir);
         if (string.IsNullOrEmpty(_config.ModsDirectory))
             _config.ModsDirectory = _modManager.ModsDirectory;

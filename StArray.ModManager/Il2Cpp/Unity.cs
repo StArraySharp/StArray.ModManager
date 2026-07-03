@@ -1,5 +1,3 @@
-using StArray.ModManager.Native;
-
 namespace StArray.ModManager.Il2Cpp;
 
 /// <summary>UnityEngine.Object</summary>

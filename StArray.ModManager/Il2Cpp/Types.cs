@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using StArray.ModManager.Native;
 
 namespace StArray.ModManager.Il2Cpp;
 

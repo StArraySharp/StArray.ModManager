@@ -7,23 +7,23 @@
     <RootNamespace>StArray.ModManager</RootNamespace>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
-    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>embedded</DebugType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+    <ProjectReference Include="..\StArray.ModManager\StArray.ModManager.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\StArray.ModManager.SourceGenerator\StArray.ModManager.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="OpenTK.Graphics" Version="4.9.4" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\fa-solid-900.ttf" />
+    <Folder Include="Il2Cpp\" />
   </ItemGroup>
 
 </Project>

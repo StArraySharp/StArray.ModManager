@@ -75,7 +75,7 @@ public static class Managed
         Logger.Error($"{nameof(Managed)}-Benchmark", $"ModLoader init: {Benchmark.End():F3}s");
 
         Benchmark.Begin();
-        var ui = new ModManagerUI(loader);
+        var ui = new ModManagerUI(loader, Path.GetDirectoryName(AssemblyPath)!);
         Logger.Error($"{nameof(Managed)}-Benchmark", $"ModManagerUI init: {Benchmark.End():F3}s");
 
         Benchmark.Begin();
