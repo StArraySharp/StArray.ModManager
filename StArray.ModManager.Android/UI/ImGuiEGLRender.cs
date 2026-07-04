@@ -1,12 +1,28 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
 using OpenTK.Graphics.Egl;
-using StArray.ModManager.Native;
+using StArray.ModManager.Android.Native;
+using StArray.ModManager.Hooks;
 using StArray.ModManager.Manager;
+using StArray.ModManager.Runtime;
+using StArray.ModManager.UI;
 
-namespace StArray.ModManager.UI;
+namespace StArray.ModManager.Android.UI;
+
+// ─── NativeHook 定义 ─────────────────────────────────
+public static partial class EglHooks
+{
+    internal static Func<IntPtr, IntPtr, int>? OnEglSwapBuffers;
+
+    [NativeHook("libEGL.so", "eglSwapBuffers", Convention = CallingConvention.Cdecl)]
+    public static int HookEglSwapBuffers(IntPtr display, IntPtr surface)
+    {
+        if (OnEglSwapBuffers != null)
+            return OnEglSwapBuffers(display, surface);
+        return HookEglSwapBuffersOriginal(display, surface);
+    }
+}
 
 /// <summary>ImGui EGL renderer / EGL 渲染器 — SwapBuffers hook, init, render pipeline</summary>
 public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
@@ -44,9 +60,6 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
     private bool _initialized;
     private Action _onRender = () => { };
 
-    private SwapBuffersDelegate? _prevSwapBuffersDelegate;
-    private delegate int SwapBuffersDelegate(IntPtr display, IntPtr surface);
-
     event Action IImGuiRenderer.OnRender
     {
         add => _onRender += value;
@@ -61,17 +74,9 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
 
     private bool InstallInstance()
     {
-        var eglLib = DL.dlopen("libEGL.so", DL.Flags.RTLD_GLOBAL);
-        if (eglLib == IntPtr.Zero)
-        {
-            eglLib = DL.dlopen("libGLESv3.so", DL.Flags.RTLD_GLOBAL);
-        }
-
-        var glSwapBuffersPtr = NativeLibrary.GetExport(eglLib, "eglSwapBuffers");
-        Dobby.Hook(glSwapBuffersPtr,
-            typeof(ImGuiEGLRenderer).GetMethod(nameof(OnSwapBuffers))!.MethodHandle.GetFunctionPointer(),
-            out var prevSwapBuffers);
-        _prevSwapBuffersDelegate = Marshal.GetDelegateForFunctionPointer<SwapBuffersDelegate>(prevSwapBuffers);
+        HookHelper.Instance = new DobbyHook();
+        EglHooks.InstallHooks();
+        EglHooks.OnEglSwapBuffers = OnSwapBuffers;
 
         // 输入 Hook 委托给静态处理器
         ImGuiInputHandler.InstallHooks();
@@ -83,11 +88,10 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             s_pendingOnRender = null;
         }
 
-        Logger.Error(nameof(ImGuiEGLRenderer), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
+        Logger.Error(nameof(ImGuiEGLRenderer), "eglSwapBuffers hooked via [NativeHook]");
         return true;
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int OnSwapBuffers(IntPtr display, IntPtr surface)
     {
         var self = s_instance!;
@@ -100,12 +104,12 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
                 !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
             {
-                return self._prevSwapBuffersDelegate!(display, surface);
+                return EglHooks.HookEglSwapBuffersOriginal(display, surface);
             }
 
             if (width <= 0 || height <= 0)
             {
-                return self._prevSwapBuffersDelegate!(display, surface);
+                return EglHooks.HookEglSwapBuffersOriginal(display, surface);
             }
 
             if (!self._initialized)
@@ -141,7 +145,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             Logger.Error(nameof(ImGuiEGLRenderer), $"OnSwapBuffers error: {ex}");
         }
 
-        return self._prevSwapBuffersDelegate!(display, surface);
+        return EglHooks.HookEglSwapBuffersOriginal(display, surface);
     }
 
     private void InitImGui(IntPtr display, IntPtr surface)

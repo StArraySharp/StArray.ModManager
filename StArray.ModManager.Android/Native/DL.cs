@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Android.Native;
 
 public class DL
 {

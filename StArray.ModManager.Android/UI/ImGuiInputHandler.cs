@@ -1,10 +1,10 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
-using StArray.ModManager.Native;
+using StArray.ModManager.Android.Native;
 using StArray.ModManager.Manager;
 
-namespace StArray.ModManager.UI;
+namespace StArray.ModManager.Android.UI;
 
 /// <summary>ImGui input handler / 输入处理器 — touch/key hooks + IME control</summary>
 public static class ImGuiInputHandler

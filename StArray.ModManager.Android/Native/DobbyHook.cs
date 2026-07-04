@@ -1,7 +1,6 @@
-using System.Runtime.InteropServices;
 using StArray.ModManager.Runtime;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Android.Native;
 
 public class DobbyHook : IHook
 {

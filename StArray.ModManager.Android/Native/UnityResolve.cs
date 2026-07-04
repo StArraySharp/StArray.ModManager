@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Android.Native;
 
 // ============================================================================
 // UnityResolve — 实例化的 Unity IL2CPP/Mono 反射 API

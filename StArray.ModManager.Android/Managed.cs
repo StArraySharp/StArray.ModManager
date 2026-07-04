@@ -2,12 +2,12 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using StArray.ModManager.Android.Native;
+using StArray.ModManager.Android.UI;
 using StArray.ModManager.Manager;
-using StArray.ModManager.Native;
 using StArray.ModManager.Runtime;
-using StArray.ModManager.UI;
 
-namespace StArray.ModManager;
+namespace StArray.ModManager.Android;
 
 /// <summary>CoreCLR entry / 加载器入口 — called by native delegate</summary>
 /// <summary>CoreCLR 入口 / 加载器入口 — called by native delegate</summary>

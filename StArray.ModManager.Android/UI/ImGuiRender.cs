@@ -4,10 +4,10 @@ using System.Runtime.InteropServices;
 using ImGuiNET;
 using OpenTK.Graphics.Egl;
 using OpenTK.Graphics.ES30;
+using StArray.ModManager.Android.Native;
 using StArray.ModManager.Manager;
-using StArray.ModManager.Native;
 
-namespace StArray.ModManager.UI;
+namespace StArray.ModManager.Android.UI;
 
 /// <summary>
 /// ImGui EGL 渲染器（单文件调试版）

@@ -1,6 +1,6 @@
 ﻿using OpenTK;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Android.Native;
 
 public class GLESBindingsContext : IBindingsContext
 {

@@ -2,10 +2,11 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
-using StArray.ModManager.Native;
+using StArray.ModManager.Android.Native;
 using StArray.ModManager.Manager;
+using StArray.ModManager.UI;
 
-namespace StArray.ModManager.UI;
+namespace StArray.ModManager.Android.UI;
 
 /// <summary>
 /// ImGui Vulkan 渲染器 —— Hook vkQueuePresentKHR 驱动渲染管线

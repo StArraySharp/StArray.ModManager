@@ -2,8 +2,8 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using StArray.ModManager.Hooks;
-using StArray.ModManager.Native;
 using StArray.ModManager.Runtime;
+using StArray.ModManager.Windows.Native;
 
 namespace StArray.ModManager.Tests;
 
@@ -556,7 +556,7 @@ public class DiagnosticTests
         var magicPInvoke = NativeFunc.GetMagicNumber();
         TestContext.WriteLine($"GetMagicNumber: Original=0x{magicOrig:X} P/Invoke=0x{magicPInvoke:X}");
 
-        UnmanagedCallersOnlyAttribute
+        
         TestHooks.UninstallHooks();
         HookHelper.Instance = null;
     }

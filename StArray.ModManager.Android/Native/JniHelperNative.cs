@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Android.Native;
 
 /// <summary>
 /// JNI Helper Native 函数绑定

@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Android.Native;
 
 /// <summary>
 /// Java 类封装 — 持有一个 jclass 全局引用，提供方法/字段查找和静态方法调用

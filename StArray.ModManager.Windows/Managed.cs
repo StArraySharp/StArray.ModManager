@@ -2,14 +2,13 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using ImGuiHook.DX12;
 using ImGuiNET;
 using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
-using StArray.ModManager.UI;
+using StArray.ModManager.Windows.UI;
 
-namespace StArray.ModManager;
+namespace StArray.ModManager.Windows;
 
 public static class Managed
 {
@@ -35,7 +34,7 @@ public static class Managed
         return IntPtr.Zero;
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl), typeof(CallConvStdcall)])]
     public static int Entry(int argc, IntPtr argv)
     {
         AppDomain.CurrentDomain.UnhandledException += (sender, e) => { Write($"UnhandledException: {e.ExceptionObject}\n"); };
@@ -65,25 +64,13 @@ public static class Managed
         Writer = new StreamWriter(Path.Combine(Path.GetDirectoryName(modsPath), "log.txt"), append: false);
         Writer.AutoFlush = true;
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
-
-        
-        /*Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(new DirectoryInfo(Path.GetDirectoryName(modsPath)).Parent.FullName,"GameAssembly.dll"));
-        StreamReader reader =
-            new StreamReader(Path.Combine(Path.GetDirectoryName(AssemblyPath), "..", "..", "winmm.dll"));
-        Thread.Sleep(5000);
-        foreach (var assembly in Il2CppDomain.Current.GetAssemblies())
-        {
-            Logger.Info($"{nameof(Managed)}-Benchmark", $"Assembly: {assembly.Name}");
-        }*/
-
+        Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(new DirectoryInfo(modsPath).Parent.Parent.FullName,"GameAssembly.dll"));
+        ModManagerUI modManagerUI = new(new ModLoader(modsPath), Path.GetDirectoryName(AssemblyPath));
+        ImGUIGLRenderer.OnRender += modManagerUI.Render;
+        ImGUIGLRenderer.Install();
         totalSw.Stop();
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;
-    }
-
-    static void EachIl2Cpp()
-    {
-        
     }
     
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]

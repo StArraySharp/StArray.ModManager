@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Android.Native;
 
 /// <summary>
 /// ImGui Android Backend (imgui_impl_android.cpp)

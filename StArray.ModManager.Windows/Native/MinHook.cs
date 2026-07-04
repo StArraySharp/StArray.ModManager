@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using StArray.ModManager.Runtime;
 
-namespace StArray.ModManager.Native;
+namespace StArray.ModManager.Windows.Native;
 
 public class MinHook : IHook
 {
