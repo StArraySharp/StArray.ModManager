@@ -74,6 +74,9 @@ jobs:
         shell: msys2 {0}
         run: |
           cd StArray.ModManager.Windows/Native
+          # Generate cimgui import lib from DLL
+          gendef - ../dlls/cimgui.dll > cimgui.def
+          dlltool -d cimgui.def -l libcimgui.a -D ../dlls/cimgui.dll
           cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
