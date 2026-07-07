@@ -30,7 +30,7 @@
     </Content>
   </ItemGroup>
 
-  <Target Name="BuildNativeDll" BeforeTargets="BeforeBuild">
+  <Target Name="BuildNativeDll" BeforeTargets="BeforeBuild" Condition="'$(BuildNativeDll)' != 'false'">
     <Exec Command="cmake -B &quot;$(ProjectDir)Native\build&quot; -G &quot;MinGW Makefiles&quot; -DCMAKE_BUILD_TYPE=$(Configuration)"
           WorkingDirectory="$(ProjectDir)Native" />
     <Exec Command="cmake --build &quot;$(ProjectDir)Native\build&quot;"

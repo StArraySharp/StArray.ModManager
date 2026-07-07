@@ -70,9 +70,15 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build (native + C#)
+      - name: Build Native (CMake + MinGW)
         shell: msys2 {0}
-        run: dotnet build StArray.ModManager.Windows/StArray.ModManager.Windows.csproj -c Release
+        run: |
+          cd StArray.ModManager.Windows/Native
+          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Build C#
+        run: dotnet build StArray.ModManager.Windows/StArray.ModManager.Windows.csproj -c Release -p:BuildNativeDll=false
 
       - name: Package
         run: |
