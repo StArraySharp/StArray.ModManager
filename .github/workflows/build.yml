@@ -43,24 +43,38 @@ jobs:
           name: library-release.aar
           path: Android/library/build/outputs/aar/library-release.aar
 
-  # ──── Windows .NET DLL ────
+  # ──── Windows Native + .NET DLL ────
   windows:
-    name: Windows DLL
-    runs-on: ubuntu-latest
+    name: Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Set up MSYS2 (MinGW)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-toolchain
 
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build Windows
+      - name: Build (native + C#)
+        shell: msys2 {0}
         run: dotnet build StArray.ModManager.Windows/StArray.ModManager.Windows.csproj -c Release
 
-      - name: Package output (exclude runtimes)
+      - name: Package
         run: |
           src="StArray.ModManager.Windows/bin/Release/net10.0"
           dst="artifacts"
@@ -69,7 +83,7 @@ jobs:
           rm -rf "$dst/runtimes"
           cd "$dst" && zip -r ../windows-dll.zip . && cd ..
 
-      - name: Upload Windows DLL
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: windows-dll.zip

@@ -30,14 +30,11 @@
     </Content>
   </ItemGroup>
 
-  <Target Name="CopyWindowsDllToManaged" AfterTargets="Build">
-    <Copy SourceFiles="$(OutputPath)StArray.ModManager.Windows.dll"
-          DestinationFolder="..\dx12app\Corehold\managed"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(OutputPath)StArray.ModManager.Windows.dll"
-          DestinationFolder="D:\Development\UnityProjects\Simple3D\output\Corehold\managed"
-          SkipUnchangedFiles="true" />
-    
+  <Target Name="BuildNativeDll" BeforeTargets="BeforeBuild">
+    <Exec Command="cmake -B &quot;$(ProjectDir)Native\build&quot; -G &quot;MinGW Makefiles&quot; -DCMAKE_BUILD_TYPE=$(Configuration)"
+          WorkingDirectory="$(ProjectDir)Native" />
+    <Exec Command="cmake --build &quot;$(ProjectDir)Native\build&quot;"
+          WorkingDirectory="$(ProjectDir)Native" />
   </Target>
 
 </Project>

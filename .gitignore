@@ -8,6 +8,11 @@
 *.aab
 *.ap_
 
+# Native generated
+StArray.ModManager.Windows/Native/build/
+StArray.ModManager.Windows/Native/cimgui.def
+StArray.ModManager.Windows/Native/libcimgui.a
+
 # Release artifacts
 /release/
 

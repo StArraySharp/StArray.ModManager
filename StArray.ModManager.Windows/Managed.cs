@@ -66,8 +66,10 @@ public static class Managed
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
         Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(new DirectoryInfo(modsPath).Parent.Parent.FullName,"GameAssembly.dll"));
         ModManagerUI modManagerUI = new(new ModLoader(modsPath), Path.GetDirectoryName(AssemblyPath));
-        ImGUIGLRenderer.OnRender += modManagerUI.Render;
-        ImGUIGLRenderer.Install();
+
+        // Use DX12 renderer — hooks IDXGISwapChain::Present via vtable + MinHook
+        ImGuiRenderer.OnRender += modManagerUI.Render;
+        ImGuiRenderer.Install();
         totalSw.Stop();
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;

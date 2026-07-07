@@ -1,6 +1,58 @@
 # Getting Started / 快速开始
 
-## 1. Inject into APK / 注入 APK
+## Windows / Windows 注入
+
+通过 [Corehold](https://github.com/StArraySharp/Corehold) 的 `winmm.dll` 代理劫持自动加载 CoreCLR。
+
+### 构建
+
+```bash
+git clone --recurse-submodules https://github.com/StArraySharp/StArray.ModManager.git
+dotnet build StArray.ModManager.Windows -c Release
+```
+
+### 部署
+
+```bash
+# 1. 下载 Corehold 的 winmm.dll + Corehold/ 模板
+#    https://github.com/StArraySharp/Corehold/releases
+
+# 2. 放入游戏 .exe 同目录
+GameFolder/
+├── Game.exe
+├── winmm.dll                          # Corehold 代理 DLL
+└── Corehold/
+    ├── corehold.json
+    ├── managed/                        # 放入我们的 DLL
+    │   ├── StArray.ModManager.dll
+    │   ├── StArray.ModManager.Windows.dll
+    │   ├── StArray.ModManager.Windows.Native.dll
+    │   ├── cimgui.dll
+    │   └── ImGui.NET.dll
+    └── runtime/                        # 首次启动自动下载 .NET
+```
+
+### corehold.json
+
+```json
+{
+    "enabled": true,
+    "console_enabled": true,
+    "runtime_path": "Corehold/runtime/",
+    "coreclr_path": "Corehold/runtime/coreclr.dll",
+    "target_assembly_path": "Corehold/managed/StArray.ModManager.Windows.dll",
+    "entry_point_method": "StArray.ModManager.Windows.Managed.Entry",
+    "entrypoint_string_args": ["Corehold/mods"]
+}
+```
+
+### 运行
+
+启动游戏 → `winmm.dll` 被加载 → Corehold 初始化 CoreCLR →
+`Managed.Entry` 调用 `NativeApi.Init` → kiero 检测 D3D9/11/12 →
+MinHook 钩 `Present` → C# 回调渲染 ImGui → 按 `INSERT` 打开菜单
+
+## Android (IL2CPP Unity) / Android 注入
 
 Download `library-release.aar` from [Releases](https://github.com/StArraySharp/StArray.ModManager/releases).  
 从 [Releases](https://github.com/StArraySharp/StArray.ModManager/releases) 下载 `library-release.aar`。
@@ -40,7 +92,7 @@ apktool b target_src -o repacked.apk
 uber-apk-signer --apks repacked.apk
 ```
 
-## 2. Deploy Manager / 部署管理器
+## 2. Deploy Manager (Android) / 部署管理器
 
 Place manager DLL and dependencies in `/sdcard/ModManager/manager/`.  
 将管理器 DLL 及依赖放入 `/sdcard/ModManager/manager/`。
@@ -66,7 +118,7 @@ Final layout / 最终目录：
         └── ...
 ```
 
-## 3. Write a Mod / 写一个 Mod
+## 3. Write a Mod / 写 Mod (跨平台)
 
 Reference `StArray.ModManager.dll` → implement `IModPlugin` → build DLL → drop into `mods/{ModName}/`.  
 引用 `StArray.ModManager.dll` → 实现 `IModPlugin` → 编译 DLL → 放入 `mods/{ModName}/`。

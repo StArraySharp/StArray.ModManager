@@ -56,27 +56,69 @@ Android/library/                 原生库 (libmodmanager.so)
 - **IImGuiRenderer** interface — swap between EGL, Vulkan backends
 - **CoreCLR args** — pass `string[]` from Java to managed `Entry(int, IntPtr)`
 
+## Third-Party Libraries
+
+| Library | License | Used In |
+|---------|---------|---------|
+| [Dear ImGui](https://github.com/ocornut/imgui) | MIT | UI rendering |
+| [cimgui](https://github.com/cimgui/cimgui) | MIT | ImGui C API bindings |
+| [ImGui.NET](https://github.com/ImGuiNET/ImGui.NET) | MIT | C# ImGui bindings |
+| [kiero2](https://github.com/kirchesz/kiero2) | MIT | Graphics API detection (D3D9/11/12/GL/VK) |
+| [MinHook](https://github.com/TsudaKageyu/minhook) | BSD-2 | API hooking |
+| [Corehold](https://github.com/StArraySharp/Corehold) | MIT | winmm proxy DLL + CoreCLR hosting |
+| [Dobby](https://github.com/jmpews/Dobby) | Apache-2.0 | Android inline hook |
+| [CoreCLR](https://github.com/dotnet/runtime) | MIT | .NET runtime |
+| [FontAwesome 7](https://fontawesome.com) | OFL/SIL | Icon font |
+
 ## Build
 
-Requires .NET 10 SDK and Android NDK 27+.
+Requires .NET 10 SDK + MinGW (gcc/cmake on PATH).
 
 ```bash
-# Build C# mod manager
-cd StArray.ModManager
-dotnet build -c Release
+# Windows (native + C#, one command)
+dotnet build StArray.ModManager.Windows -c Release
 
-# Build Android native library
-cd Android
-./gradlew :library:assembleRelease
+# Android
+cd Android && ./gradlew :library:assembleRelease
+```
+
+## Windows Architecture
+
+The Windows native DLL (`StArray.ModManager.Windows.Native.dll`) uses
+[kiero2](https://github.com/kirchesz/kiero2) + [MinHook](https://github.com/TsudaKageyu/minhook) to
+detect and hook the game's graphics API at runtime.
+
+| Backend | Support |
+|---------|---------|
+| D3D12 | Descriptor heap + Command list |
+| D3D11 | Device + Context |
+| D3D9  | Device |
+| OpenGL / Vulkan | Detected only |
+
+The C# side (`ImGuiRenderer`) is backend-agnostic — it provides init/shutdown/render callbacks and
+the native DLL handles all platform-specific `ImGui_Impl*` setup.
+
+```mermaid
+flowchart LR
+    CSharp[C# ImGuiRenderer] -->|P/Invoke Init| Native[Native DLL]
+    Native -->|kiero| API[D3D9/11/12]
+    API -->|MinHook| Present[Present Hook]
+    Present -->|callback| CSharp
+    CSharp -->|ImGui.NET| cimgui[cimgui.dll]
 ```
 
 ## Target
 
-- Android arm64-v8a
-- IL2CPP Unity games (API 26+)
+- Windows x64 (D3D9/11/12) — DLL injection or CoreCLR hosting
+- Android arm64-v8a (OpenGL ES) — IL2CPP Unity games (API 26+)
 - CoreCLR .NET 10 runtime
 
 ## Getting Started
+
+```bash
+git clone --recurse-submodules https://github.com/StArraySharp/StArray.ModManager.git
+dotnet build StArray.ModManager.Windows -c Release
+```
 
 See [GET_STARTED.md](GET_STARTED.md) for injection and build instructions.
 
