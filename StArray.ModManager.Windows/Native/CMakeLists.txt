@@ -20,15 +20,9 @@ target_include_directories(MinHook PUBLIC minhook/include)
 target_compile_definitions(MinHook PRIVATE _CRT_SECURE_NO_WARNINGS)
 
 # ---- kiero2 (submodule, static lib, all backends except D3D10) ----
-add_library(kiero STATIC
-    kiero2/kiero_intern.cpp
-    kiero2/kiero_d3d9.cpp
-    kiero2/kiero_d3d11.cpp
-    kiero2/kiero_d3d12.cpp
-    kiero2/kiero_opengl.cpp
-    kiero2/kiero_vulkan.cpp
-)
-target_include_directories(kiero PUBLIC kiero2)
+# Single translation unit ensures consistent KIERO_IMPL_FREE_SLOT values
+add_library(kiero STATIC kiero_all.cpp)
+target_include_directories(kiero PUBLIC . kiero2)
 target_compile_definitions(kiero PRIVATE KIERO_BUILD_D3D9 KIERO_BUILD_D3D11 KIERO_BUILD_D3D12 KIERO_BUILD_OPENGL KIERO_BUILD_VULKAN)
 
 # ---- Main hook DLL ----
