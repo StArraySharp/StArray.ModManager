@@ -55,17 +55,20 @@ public static class Managed
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Args parse ({argc} args): {Benchmark.End():F3}s");
 
         Benchmark.Begin();
+        // args[0]: mods directory (from corehold.json entrypoint_string_args)
         string modsPath = args.Length > 0
             ? Path.GetFullPath(args[0])
-            : Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "..", "mods");
-        AssemblyPath = Path.Combine(Path.GetDirectoryName(modsPath)!, "manager", typeof(Managed).Namespace + ".dll");
+            : Path.Combine(AppContext.BaseDirectory, "..", "mods");
+
+        // Managed directory = where our DLLs live (AppContext.BaseDirectory for CoreCLR host)
+        string managedDir = AppContext.BaseDirectory;
+        AssemblyPath = Path.Combine(managedDir, typeof(Managed).Namespace + ".dll");
         if (!Directory.Exists(modsPath))
             Directory.CreateDirectory(modsPath);
         Writer = new StreamWriter(Path.Combine(Path.GetDirectoryName(modsPath), "log.txt"), append: false);
         Writer.AutoFlush = true;
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
-        Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(new DirectoryInfo(modsPath).Parent.Parent.FullName,"GameAssembly.dll"));
-        ModManagerUI modManagerUI = new(new ModLoader(modsPath), Path.GetDirectoryName(AssemblyPath));
+        ModManagerUI modManagerUI = new(new ModLoader(modsPath), managedDir);
 
         // Use DX12 renderer — hooks IDXGISwapChain::Present via vtable + MinHook
         ImGuiRenderer.OnRender += modManagerUI.Render;

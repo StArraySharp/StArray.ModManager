@@ -84,26 +84,33 @@ cd Android && ./gradlew :library:assembleRelease
 
 ## Windows Architecture
 
-The Windows native DLL (`StArray.ModManager.Windows.Native.dll`) uses
-[kiero2](https://github.com/kirchesz/kiero2) + [MinHook](https://github.com/TsudaKageyu/minhook) to
-detect and hook the game's graphics API at runtime.
+The native DLL (`StArray.ModManager.Windows.Native.dll`) uses
+[kiero2](https://github.com/kirchesz/kiero2) for graphics API detection and
+[MinHook](https://github.com/TsudaKageyu/minhook) for `Present` hooking.
 
-| Backend | Support |
-|---------|---------|
-| D3D12 | Descriptor heap + Command list |
-| D3D11 | Device + Context |
-| D3D9  | Device |
-| OpenGL / Vulkan | Detected only |
+**Per-backend hook files** (`Native/`):
 
-The C# side (`ImGuiRenderer`) is backend-agnostic — it provides init/shutdown/render callbacks and
-the native DLL handles all platform-specific `ImGui_Impl*` setup.
+| File | Backend | Init | Render |
+|------|---------|------|--------|
+| `hook_d3d12.cpp` | D3D12 | Descriptor heaps, command list, RTV per-frame contexts | Resource barriers + OMSetRenderTargets |
+| `hook_d3d11.cpp` | D3D11 | Device + Context + persistent backbuffer RTV | OMSetRenderTargets + RenderDrawData |
+| `hook_d3d9.cpp`  | D3D9  | SwapChain QI → Device | Viewport/scissor save-restore |
+| `main.cpp`       | GL/VK | Win32 init only (C# handles backend) | C# render callback only |
+
+**Unified dispatch** (`main.cpp` `hkPresent`):
+- All backends share `DisplaySize` (from swapchain desc), `ImGui_ImplWin32_NewFrame`, WndProc hook
+- `DEBUG_LOG` conditional compilation (`NDEBUG` → compiled out in Release)
+- Window handle from `SwapChain::GetDesc().OutputWindow` (kiero approach)
 
 ```mermaid
 flowchart LR
     CSharp[C# ImGuiRenderer] -->|P/Invoke Init| Native[Native DLL]
-    Native -->|kiero| API[D3D9/11/12]
-    API -->|MinHook| Present[Present Hook]
-    Present -->|callback| CSharp
+    Native -->|kiero2 detect| API[D3D9/11/12/GL/VK]
+    API -->|MinHook| Present[hkPresent]
+    Present -->|dispatch| D3D11[hook_d3d11]
+    Present -->|dispatch| D3D12[hook_d3d12]
+    Present -->|dispatch| D3D9[hook_d3d9]
+    D3D11 & D3D12 & D3D9 -->|callback| CSharp
     CSharp -->|ImGui.NET| cimgui[cimgui.dll]
 ```
 

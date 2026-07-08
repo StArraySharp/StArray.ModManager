@@ -63,8 +63,8 @@ extern "C" {
 }
 
 // ---- Logging ----
-char dlldir[320];
-char* GetDirectoryFile(char* filename) {
+inline char dlldir[320];
+inline char* GetDirectoryFile(char* filename) {
     static char path[320];
     strcpy_s(path, dlldir);
     strcat_s(path, filename);
@@ -85,6 +85,13 @@ inline void Log(const char* fmt, ...) {
     if (f.is_open()) f << text << endl;
 }
 
+// Conditional debug logging: enabled in Debug builds, compiled out in Release
+#ifndef NDEBUG
+#define DEBUG_LOG(fmt, ...) Log("[DEBUG] " fmt, ##__VA_ARGS__)
+#else
+#define DEBUG_LOG(fmt, ...) ((void)0)
+#endif
+
 // ---- Type helpers ----
 #if defined _M_X64
 typedef uint64_t uintx_t;
@@ -92,31 +99,13 @@ typedef uint64_t uintx_t;
 typedef uint32_t uintx_t;
 #endif
 
-// ---- Hook helpers (using kiero, tries all 5 backends) ----
+// ---- kiero2 globals (populated by MainThread) ----
 static kiero::D3D9Output    g_KieroD3D9;
 static kiero::D3D11Output   g_KieroD3D11;
 static kiero::D3D12Output   g_KieroD3D12;
 static kiero::OpenGLOutput  g_KieroOpenGL;
 static kiero::VulkanOutput  g_KieroVulkan;
-static int g_KieroBackend = -1; // 0=D3D9 1=D3D11 2=D3D12 3=OpenGL 4=Vulkan
-
-inline bool HookInit() {
-    MH_Initialize();
-
-    #define TRY_KIERO(id, Impl, Out) \
-        if (g_KieroBackend < 0) { \
-            auto err = kiero::locate<kiero::Impl>(nullptr, &g_##Out); \
-            if (err == kiero::Error_Nil) { g_KieroBackend = id; } \
-        }
-
-    TRY_KIERO(0, Implementation_D3D12, KieroD3D12);
-    TRY_KIERO(1, Implementation_D3D11, KieroD3D11);
-    TRY_KIERO(2, Implementation_D3D9,  KieroD3D9);
-    TRY_KIERO(3, Implementation_OpenGL, KieroOpenGL);
-    TRY_KIERO(4, Implementation_Vulkan, KieroVulkan);
-
-    return g_KieroBackend >= 0;
-}
+static int g_KieroBackend = -1; // 0=D3D12 1=D3D11 2=D3D9 3=OpenGL 4=Vulkan
 
 // Per-backend vtable accessors
 inline void* D3D12_DEV(int i)  { return g_KieroD3D12.device_methods[i]; }
@@ -128,23 +117,5 @@ inline void* D3D11_DEV(int i)  { return g_KieroD3D11.device_methods[i]; }
 inline void* D3D11_CTX(int i)  { return g_KieroD3D11.context_methods[i]; }
 inline void* D3D9_DEV(int i)   { return g_KieroD3D9.device_methods[i]; }
 
-// Generic: pick based on active backend (D3D9/11/12 only for actual hooking)
-inline void* KieroMethod(int d3d12Idx, int d3d11Idx, int d3d9Idx) {
-    switch (g_KieroBackend) {
-        case 0: return d3d12Idx >= 0 && (size_t)d3d12Idx < g_KieroD3D12.command_queue_methods.size() ? D3D12_CQ(d3d12Idx) : nullptr;
-        case 1: return d3d11Idx >= 0 && (size_t)d3d11Idx < g_KieroD3D11.context_methods.size()      ? D3D11_CTX(d3d11Idx) : nullptr;
-        case 2: return d3d9Idx  >= 0 && (size_t)d3d9Idx  < g_KieroD3D9.device_methods.size()         ? D3D9_DEV(d3d9Idx)   : nullptr;
-        default: return nullptr;
-    }
-}
-
-inline void* KieroSwap(int d3d12Idx, int d3d11Idx, int d3d9Idx) {
-    switch (g_KieroBackend) {
-        case 0: return d3d12Idx >= 0 && (size_t)d3d12Idx < g_KieroD3D12.swapchain_methods.size() ? D3D12_SWAP(d3d12Idx) : nullptr;
-        case 1: return d3d11Idx >= 0 && (size_t)d3d11Idx < g_KieroD3D11.swapchain_methods.size() ? D3D11_SWAP(d3d11Idx) : nullptr;
-        case 2: return d3d9Idx  >= 0 && (size_t)d3d9Idx  < g_KieroD3D9.device_methods.size()      ? D3D9_DEV(d3d9Idx)   : nullptr;
-        default: return nullptr;
-    }
-}
 
 inline void DisableAll() { MH_DisableHook(MH_ALL_HOOKS); MH_Uninitialize(); }
