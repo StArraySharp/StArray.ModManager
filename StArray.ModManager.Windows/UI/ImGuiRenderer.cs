@@ -43,7 +43,7 @@ public sealed unsafe class ImGuiRenderer : IImGuiRenderer
                 Marshal.GetFunctionPointerForDelegate(_sInit),
                 Marshal.GetFunctionPointerForDelegate(_sShutdown),
                 Marshal.GetFunctionPointerForDelegate(_sRender));
-            W($"[NH] NativeInit={r} backend=auto");
+            W($"[NH] NativeInit={r}");
 
             if (s_pending != null) { _onRender += s_pending; s_pending = null; }
             _ok = true; W("[Renderer] Ready (multi-backend)");

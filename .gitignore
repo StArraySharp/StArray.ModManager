@@ -50,7 +50,7 @@ project.lock.json
 # test project (exclude entire dir)
 TestAndroidProject/
 TestAndroidProject2/
-/dx12app/
+tests
 
 # Runtime data (mods, etc — user-managed)
 /Runtime/

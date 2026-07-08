@@ -105,7 +105,6 @@ static kiero::D3D11Output   g_KieroD3D11;
 static kiero::D3D12Output   g_KieroD3D12;
 static kiero::OpenGLOutput  g_KieroOpenGL;
 static kiero::VulkanOutput  g_KieroVulkan;
-static int g_KieroBackend = -1; // 0=D3D12 1=D3D11 2=D3D9 3=OpenGL 4=Vulkan
 
 // Per-backend vtable accessors
 inline void* D3D12_DEV(int i)  { return g_KieroD3D12.device_methods[i]; }

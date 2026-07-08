@@ -10,6 +10,7 @@ bool ShowMenu = false, ImGui_Initialised = false;
 HWND g_GameWindow = nullptr;
 WNDPROC g_OriginalWndProc = nullptr;
 static HMODULE g_Module = nullptr;
+static int g_SelectedBackend = -1; // set by C# via SetBackend()
 
 static int g_WndProcMsgCount = 0;
 LRESULT APIENTRY WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -20,13 +21,13 @@ LRESULT APIENTRY WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 HRESULT APIENTRY hkPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
     if (!ImGui_Initialised) {
         if (imgui_callbacks.init_callback == nullptr) return oPresent(sc, sync, flags);
-        DEBUG_LOG("hkPresent: first frame init, backend=%d", g_KieroBackend);
+        DEBUG_LOG("hkPresent: first frame init, backend=%d", g_SelectedBackend);
         {
             DXGI_SWAP_CHAIN_DESC sd; sc->GetDesc(&sd);
             g_GameWindow = sd.OutputWindow;
             DEBUG_LOG("hkPresent: OutputWindow=%p (%dx%d)", g_GameWindow, sd.BufferDesc.Width, sd.BufferDesc.Height);
         }
-        switch (g_KieroBackend) {
+        switch (g_SelectedBackend) {
             case 2: DX9::Init(sc);  break;
             case 1: DX11::Init(sc); break;
             case 0: DX12::Init(sc); break;
@@ -36,7 +37,7 @@ HRESULT APIENTRY hkPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
                 ImGui_ImplWin32_Init(g_GameWindow);
                 DEBUG_LOG("hkPresent: GL/VK init via C#, no native backend");
                 break;
-            default: DEBUG_LOG("hkPresent: unknown backend=%d, skipping init", g_KieroBackend); break;
+            default: DEBUG_LOG("hkPresent: unknown backend=%d, skipping init", g_SelectedBackend); break;
         }
         g_OriginalWndProc = (WNDPROC)SetWindowLongPtr(g_GameWindow, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
         ImGui_Initialised = true;
@@ -60,7 +61,7 @@ HRESULT APIENTRY hkPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
       io->DisplaySize.x = (float)sd.BufferDesc.Width; io->DisplaySize.y = (float)sd.BufferDesc.Height; }
     ImGui_ImplWin32_NewFrame();
 
-    switch (g_KieroBackend) {
+    switch (g_SelectedBackend) {
         case 4: case 3: // VK/GL: C# render only
             if (imgui_callbacks.render_callback) imgui_callbacks.render_callback(); break;
         case 2: DX9::Render(sc);  break;
@@ -86,40 +87,66 @@ DWORD WINAPI MainThread(LPVOID) {
         Sleep(100);
     }
 
-    // ---- kiero2 backend detection (explicit locate, no macros) ----
-    MH_Initialize();
-    {
-        kiero::D3D12Output   d3d12;
-        kiero::D3D11Output   d3d11;
-        kiero::D3D9Output    d3d9;
-        kiero::OpenGLOutput  gl;
-        kiero::VulkanOutput  vk;
-
-        if      (kiero::locate<kiero::Implementation_D3D12>(nullptr, &d3d12) == kiero::Error_Nil)
-            { g_KieroBackend = 0; g_KieroD3D12 = d3d12; DEBUG_LOG("MainThread: backend=D3D12"); }
-        else if (kiero::locate<kiero::Implementation_D3D11>(nullptr, &d3d11) == kiero::Error_Nil)
-            { g_KieroBackend = 1; g_KieroD3D11 = d3d11; DEBUG_LOG("MainThread: backend=D3D11"); }
-        else if (kiero::locate<kiero::Implementation_D3D9>(nullptr, &d3d9) == kiero::Error_Nil)
-            { g_KieroBackend = 2; g_KieroD3D9  = d3d9;  DEBUG_LOG("MainThread: backend=D3D9"); }
-        else if (kiero::locate<kiero::Implementation_OpenGL>(nullptr, &gl) == kiero::Error_Nil)
-            { g_KieroBackend = 3; g_KieroOpenGL  = gl;   DEBUG_LOG("MainThread: backend=OpenGL"); }
-        else if (kiero::locate<kiero::Implementation_Vulkan>(nullptr, &vk) == kiero::Error_Nil)
-            { g_KieroBackend = 4; g_KieroVulkan  = vk;   DEBUG_LOG("MainThread: backend=Vulkan"); }
-        else {
-            DEBUG_LOG("MainThread: no backend detected!");
-            return 1;
-        }
+    if (g_SelectedBackend < 0 || g_SelectedBackend > 4) {
+        DEBUG_LOG("MainThread: invalid backend=%d, no hooks installed", g_SelectedBackend);
+        return 1;
     }
-    DEBUG_LOG("MainThread: backend=%d (0=D3D12 1=D3D11 2=D3D9 3=GL 4=VK)", g_KieroBackend);
-    if (g_KieroBackend == 0) {
+
+    MH_Initialize();
+    DEBUG_LOG("MainThread: backend=%d (0=D3D12 1=D3D11 2=D3D9 3=GL 4=VK)", g_SelectedBackend);
+
+    // GL/VK: no DXGI swapchain to hook — call init directly, C# handles everything
+    if (g_SelectedBackend >= 3) {
+        if (imgui_callbacks.init_callback) imgui_callbacks.init_callback();
+        DEBUG_LOG("MainThread: GL/VK backend, C# handles rendering, no native hooks");
+        return 0;
+    }
+
+    if (g_SelectedBackend == 0) {
         void* t = D3D12_CQ(10);
         DEBUG_LOG("MainThread: D3D12 CQ[10]=%p (ExecuteCommandLists)", t);
         if (t) { MH_CreateHook(t, (LPVOID)hkExecuteCommandLists, (void**)&oExecuteCommandLists); MH_EnableHook(t); }
     }
-    void* prTarget = g_KieroBackend == 0 ? D3D12_SWAP(8) : g_KieroBackend == 1 ? D3D11_SWAP(8) : D3D9_DEV(17);
+    void* prTarget = g_SelectedBackend == 0 ? D3D12_SWAP(8) : g_SelectedBackend == 1 ? D3D11_SWAP(8) : D3D9_DEV(17);
     DEBUG_LOG("MainThread: Present target=%p, installing hook...", prTarget);
     if (prTarget) { MH_CreateHook(prTarget, (LPVOID)hkPresent, (void**)&oPresent); MH_EnableHook(prTarget); }
     DEBUG_LOG("MainThread: hooks installed, oPresent=%p", oPresent);
+    return 0;
+}
+
+// ---- C# API ----
+
+extern "C" __declspec(dllexport) int __cdecl GetAvailableBackends() {
+    int mask = 0;
+    kiero::D3D12Output   d3d12;
+    kiero::D3D11Output   d3d11;
+    kiero::D3D9Output    d3d9;
+    kiero::OpenGLOutput  gl;
+    kiero::VulkanOutput  vk;
+
+    // else-if chain: first match wins (D3D12 locate may false-positive on D3D11 devices)
+    if      (kiero::locate<kiero::Implementation_D3D11>(nullptr, &d3d11) == kiero::Error_Nil)
+        { mask = 2; g_KieroD3D11 = d3d11; DEBUG_LOG("GetAvailableBackends: D3D11"); }
+    else if (kiero::locate<kiero::Implementation_D3D12>(nullptr, &d3d12) == kiero::Error_Nil)
+        { mask = 1; g_KieroD3D12 = d3d12; DEBUG_LOG("GetAvailableBackends: D3D12"); }
+    else if (kiero::locate<kiero::Implementation_D3D9>(nullptr, &d3d9) == kiero::Error_Nil)
+        { mask = 4; g_KieroD3D9  = d3d9;  DEBUG_LOG("GetAvailableBackends: D3D9"); }
+    else if (kiero::locate<kiero::Implementation_OpenGL>(nullptr, &gl) == kiero::Error_Nil)
+        { mask = 8; g_KieroOpenGL  = gl;   DEBUG_LOG("GetAvailableBackends: OpenGL"); }
+    else if (kiero::locate<kiero::Implementation_Vulkan>(nullptr, &vk) == kiero::Error_Nil)
+        { mask = 16; g_KieroVulkan  = vk;  DEBUG_LOG("GetAvailableBackends: Vulkan"); }
+
+    DEBUG_LOG("GetAvailableBackends: mask=0x%02X", mask);
+    return mask;
+}
+
+extern "C" __declspec(dllexport) int __cdecl SetBackend(int backend) {
+    if (backend < 0 || backend > 4) {
+        DEBUG_LOG("SetBackend: invalid backend=%d", backend);
+        return 1;
+    }
+    g_SelectedBackend = backend;
+    DEBUG_LOG("SetBackend: backend=%d", backend);
     return 0;
 }
 

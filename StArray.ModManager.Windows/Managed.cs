@@ -7,6 +7,7 @@ using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
 using StArray.ModManager.Windows.UI;
+using StArray.ModManager.Windows.Native;
 
 namespace StArray.ModManager.Windows;
 
@@ -70,9 +71,20 @@ public static class Managed
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
         ModManagerUI modManagerUI = new(new ModLoader(modsPath), managedDir);
 
-        // Use DX12 renderer — hooks IDXGISwapChain::Present via vtable + MinHook
-        ImGuiRenderer.OnRender += modManagerUI.Render;
-        ImGuiRenderer.Install();
+        // Detect backend and pick renderer
+        int mask = NativeApi.GetAvailableBackends();
+        Logger.Info("Backend", $"GetAvailableBackends=0x{mask:X2} (1=D3D12 2=D3D11 4=D3D9 8=GL 16=VK)");
+
+        if ((mask & 2) != 0) // D3D11
+            { NativeApi.SetBackend(1); ImGuiRenderer.OnRender += modManagerUI.Render; ImGuiRenderer.Install(); }
+        else if ((mask & 1) != 0) // D3D12
+            { NativeApi.SetBackend(0); ImGuiRenderer.OnRender += modManagerUI.Render; ImGuiRenderer.Install(); }
+        else if ((mask & 4) != 0) // D3D9
+            { NativeApi.SetBackend(2); ImGuiRenderer.OnRender += modManagerUI.Render; ImGuiRenderer.Install(); }
+        else if ((mask & 8) != 0) // OpenGL
+            { ImGUIGLRenderer.OnRender += modManagerUI.Render; ImGUIGLRenderer.Install(); }
+        else
+            { Logger.Error("Backend", $"No supported backend"); return 1; }
         totalSw.Stop();
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;
