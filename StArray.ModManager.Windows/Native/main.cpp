@@ -41,25 +41,16 @@ HRESULT APIENTRY hkPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
         }
         g_OriginalWndProc = (WNDPROC)SetWindowLongPtr(g_GameWindow, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
         ImGui_Initialised = true;
-        if (g_OriginalWndProc)
-            DEBUG_LOG("hkPresent: wndproc hooked old=%p new=%p hwnd=%p OK", g_OriginalWndProc, WndProc, g_GameWindow);
-        else
-            DEBUG_LOG("hkPresent: SetWindowLongPtr FAILED err=%lu hwnd=%p", GetLastError(), g_GameWindow);
-        {
-            RECT cr; GetClientRect(g_GameWindow, &cr);
-            DXGI_SWAP_CHAIN_DESC sd; sc->GetDesc(&sd);
-            DEBUG_LOG("hkPresent: clientRect=%dx%d backbuf=%dx%d",
-                cr.right-cr.left, cr.bottom-cr.top,
-                sd.BufferDesc.Width, sd.BufferDesc.Height);
-        }
+        ImGuiIO* io = igGetIO();
+        DXGI_SWAP_CHAIN_DESC sd; sc->GetDesc(&sd);
+        io->DisplaySize.x = (float)sd.BufferDesc.Width; io->DisplaySize.y = (float)sd.BufferDesc.Height;
     }
-
-    if (GetAsyncKeyState(VK_INSERT) & 1) { ShowMenu = !ShowMenu; DEBUG_LOG("hkPresent: ShowMenu toggled -> %d", ShowMenu); }
-
-    ImGuiIO* io = igGetIO();
+    ImGui_ImplWin32_NewFrame();
+    // Set DisplaySize AFTER Win32_NewFrame — it overwrites io.DisplaySize with client rect!
+    /*
     { DXGI_SWAP_CHAIN_DESC sd; sc->GetDesc(&sd);
       io->DisplaySize.x = (float)sd.BufferDesc.Width; io->DisplaySize.y = (float)sd.BufferDesc.Height; }
-    ImGui_ImplWin32_NewFrame();
+      */
 
     switch (g_SelectedBackend) {
         case 4: case 3: // VK/GL: C# render only

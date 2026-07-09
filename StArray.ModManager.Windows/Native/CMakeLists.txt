@@ -57,5 +57,5 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/../bin/${CMAKE_BUILD_TYPE}/net10.0/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:${PROJECT_NAME}>"
-        "D:/Softwares/Steam/steamapps/common/A Dance of Fire and Ice/Corehold/managed"
+        "D:/Development/RiderProjects/StArray.ModManager/tests/Corehold/managed"
 )

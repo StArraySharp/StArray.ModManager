@@ -41,7 +41,7 @@ public sealed unsafe class ImGUIGLRenderer : IImGuiRenderer
     }
 
     private bool _initialized;
-    private Action _onRender = () => { };
+    private event Action _onRender = () => { };
     private bool _imguiInited;
     private IntPtr _hwnd;
     private IntPtr _origWndProc;
