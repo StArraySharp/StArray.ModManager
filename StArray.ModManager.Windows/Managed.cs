@@ -3,9 +3,9 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
-using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
+using StArray.ModManager.RuntimeAbstractions;
 using StArray.ModManager.Windows.UI;
 using StArray.ModManager.Windows.Native;
 
@@ -38,7 +38,10 @@ public static class Managed
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl), typeof(CallConvStdcall)])]
     public static int Entry(int argc, IntPtr argv)
     {
-        AppDomain.CurrentDomain.UnhandledException += (sender, e) => { Write($"UnhandledException: {e.ExceptionObject}\n"); };
+        AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+        {
+            Write($"UnhandledException: {e.ExceptionObject}\n");
+        };
         var totalSw = Stopwatch.StartNew();
 
         Benchmark.Begin();
@@ -49,10 +52,7 @@ public static class Managed
             args[i] = Marshal.PtrToStringUTF8(pStr)!;
         }
 
-        Logger.OnLog += (level, s, arg3) =>
-        {
-            Write($"[ModManager/{s}][{level}]: {arg3}\n");
-        };
+        Logger.OnLog += (level, s, arg3) => { Write($"[ModManager/{s}][{level}]: {arg3}\n"); };
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Args parse ({argc} args): {Benchmark.End():F3}s");
 
         Benchmark.Begin();
@@ -69,30 +69,56 @@ public static class Managed
         Writer = new StreamWriter(Path.Combine(Path.GetDirectoryName(modsPath), "log.txt"), append: false);
         Writer.AutoFlush = true;
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
+
+        // 检测运行时后端 + 图形设备类型
+        RuntimeManager.Detect();
+        Logger.Info("Runtime", $"Detected backend: {RuntimeManager.Backend}");
+
         ModManagerUI modManagerUI = new(new ModLoader(modsPath), managedDir);
 
         // Detect backend and pick renderer
-        int mask = NativeApi.GetAvailableBackends();
-        Logger.Info("Backend", $"GetAvailableBackends=0x{mask:X2} (1=D3D12 2=D3D11 4=D3D9 8=GL 16=VK)");
+        var renderer = GetGameRenderer();
+        Logger.Info("Backend", $"Detected renderer: {renderer}");
 
-        if ((mask & 2) != 0) // D3D11
-            { NativeApi.SetBackend(1); ImGuiRenderer.OnRender += modManagerUI.Render; ImGuiRenderer.Install(); }
-        else if ((mask & 1) != 0) // D3D12
-            { NativeApi.SetBackend(0); ImGuiRenderer.OnRender += modManagerUI.Render; ImGuiRenderer.Install(); }
-        else if ((mask & 4) != 0) // D3D9
-            { NativeApi.SetBackend(2); ImGuiRenderer.OnRender += modManagerUI.Render; ImGuiRenderer.Install(); }
-        else if ((mask & 8) != 0) // OpenGL
-            { ImGUIGLRenderer.OnRender += modManagerUI.Render; ImGUIGLRenderer.Install(); }
+        if ((renderer & Renderer.D3D11) != 0)
+        {
+            NativeApi.SetBackend(1); // D3D11
+            ImGuiRenderer.OnRender += modManagerUI.Render;
+            ImGuiRenderer.Install();
+        }
+        else if ((renderer & Renderer.D3D12) != 0)
+        {
+            NativeApi.SetBackend(0); // D3D12
+            ImGuiRenderer.OnRender += modManagerUI.Render;
+            ImGuiRenderer.Install();
+        }
+        else if ((renderer & Renderer.D3D9) != 0)
+        {
+            NativeApi.SetBackend(2); // D3D9
+            ImGuiRenderer.OnRender += modManagerUI.Render;
+            ImGuiRenderer.Install();
+        }
+        else if ((renderer & Renderer.OpenGL) != 0)
+        {
+            ImGUIGLRenderer.OnRender += modManagerUI.Render;
+            ImGUIGLRenderer.Install();
+        }
         else
-            { Logger.Error("Backend", $"No supported backend"); return 1; }
+        {
+            Logger.Error("Backend", "No supported backend");
+            return 1;
+        }
+
         totalSw.Stop();
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;
     }
-    
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     static extern bool WriteConsoleW(nint hConsole, string text, uint len, out uint written, nint reserved);
+
     const int STD_OUTPUT_HANDLE = -11;
+
     [DllImport("kernel32.dll")]
     static extern nint GetStdHandle(int nStdHandle);
 
@@ -100,5 +126,52 @@ public static class Managed
     {
         Writer?.Write(s);
         WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s, (uint)s.Length, out _, 0);
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [Flags]
+    public enum Renderer
+    {
+        None = 0,
+        D3D12 = 1,
+        D3D11 = 2,
+        D3D9 = 4,
+        OpenGL = 8,
+        Vulkan = 16
+    }
+
+    public static Renderer GetGameRenderer()
+    {
+        Renderer result = Renderer.None;
+
+        // Unity 2020+ GraphicsDeviceType 枚举值:
+        //   Direct3D9 = 0, Direct3D11 = 2, Direct3D12 = 3
+        //   OpenGLCore = 11, Vulkan = 13
+        int gdt = GraphicsDevice.GetGraphicsDeviceType();
+        switch (gdt)
+        {
+            case 0:  result |= Renderer.D3D9;   break;
+            case 2:  result |= Renderer.D3D11;   break;
+            case 3:  result |= Renderer.D3D12;   break;
+            case 11: result |= Renderer.OpenGL;   break;
+            case 13: result |= Renderer.Vulkan;   break;
+            default:
+                // 回退到模块名检测（非 Unity 或未知版本）
+                if (GetModuleHandle("d3d12.dll") != IntPtr.Zero)
+                    result |= Renderer.D3D12;
+                if (GetModuleHandle("d3d11.dll") != IntPtr.Zero)
+                    result |= Renderer.D3D11;
+                if (GetModuleHandle("d3d9.dll") != IntPtr.Zero)
+                    result |= Renderer.D3D9;
+                if (GetModuleHandle("opengl32.dll") != IntPtr.Zero)
+                    result |= Renderer.OpenGL;
+                if (GetModuleHandle("vulkan-1.dll") != IntPtr.Zero)
+                    result |= Renderer.Vulkan;
+                break;
+        }
+
+        return result;
     }
 }

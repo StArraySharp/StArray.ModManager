@@ -29,7 +29,6 @@ HRESULT APIENTRY hkPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
         }
         switch (g_SelectedBackend) {
             case 2: DX9::Init(sc);  break;
-            case 1: DX11::Init(sc); break;
             case 0: DX12::Init(sc); break;
             case 3: /* OpenGL  - only Win32 init, C# handles backend */
             case 4: /* Vulkan  - only Win32 init, C# handles backend */
@@ -56,7 +55,6 @@ HRESULT APIENTRY hkPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
         case 4: case 3: // VK/GL: C# render only
             if (imgui_callbacks.render_callback) imgui_callbacks.render_callback(); break;
         case 2: DX9::Render(sc);  break;
-        case 1: DX11::Render(sc); break;
         default: DX12::Render(sc); break;
     }
     return oPresent(sc, sync, flags);
@@ -87,18 +85,26 @@ DWORD WINAPI MainThread(LPVOID) {
     DEBUG_LOG("MainThread: backend=%d (0=D3D12 1=D3D11 2=D3D9 3=GL 4=VK)", g_SelectedBackend);
 
     // GL/VK: no DXGI swapchain to hook — call init directly, C# handles everything
+    // GL/VK: no DXGI swapchain to hook — call init directly, C# handles everything
     if (g_SelectedBackend >= 3) {
         if (imgui_callbacks.init_callback) imgui_callbacks.init_callback();
         DEBUG_LOG("MainThread: GL/VK backend, C# handles rendering, no native hooks");
         return 0;
     }
 
+    // D3D11: manual vtable from dummy device (bypasses kiero2)
+    if (g_SelectedBackend == 1) {
+        return DX11::Install() ? 0 : 1;
+    }
+
+    // D3D12: kiero2 vtable
     if (g_SelectedBackend == 0) {
         void* t = D3D12_CQ(10);
         DEBUG_LOG("MainThread: D3D12 CQ[10]=%p (ExecuteCommandLists)", t);
         if (t) { MH_CreateHook(t, (LPVOID)hkExecuteCommandLists, (void**)&oExecuteCommandLists); MH_EnableHook(t); }
     }
-    void* prTarget = g_SelectedBackend == 0 ? D3D12_SWAP(8) : g_SelectedBackend == 1 ? D3D11_SWAP(8) : D3D9_DEV(17);
+    // D3D12/D3D9: kiero2 Present hook
+    void* prTarget = g_SelectedBackend == 0 ? D3D12_SWAP(8) : D3D9_DEV(17);
     DEBUG_LOG("MainThread: Present target=%p, installing hook...", prTarget);
     if (prTarget) { MH_CreateHook(prTarget, (LPVOID)hkPresent, (void**)&oPresent); MH_EnableHook(prTarget); }
     DEBUG_LOG("MainThread: hooks installed, oPresent=%p", oPresent);

@@ -1,9 +1,10 @@
 using System.Runtime.InteropServices;
+using StArray.ModManager.RuntimeAbstractions;
 
 namespace StArray.ModManager.Il2Cpp;
 
 /// <summary>反射 API：Assembly → Class → Method/Field</summary>
-public unsafe class Il2CppAssembly
+public unsafe class Il2CppAssembly : IRuntimeAssembly
 {
     public nint Ptr { get; }
     public Il2CppAssembly(nint ptr) => Ptr = ptr;
@@ -19,6 +20,9 @@ public unsafe class Il2CppAssembly
         return k != 0 ? new Il2CppClass(k) : null;
     }
 
+    IRuntimeClass? IRuntimeAssembly.GetClass(string namespaze, string name)
+        => GetClass(namespaze, name);
+
     public static Il2CppAssembly? Get(string name)
     {
         var domain = Il2CppFunctions.il2cpp_domain_get();
@@ -29,7 +33,7 @@ public unsafe class Il2CppAssembly
     }
 }
 
-public unsafe class Il2CppClass
+public unsafe class Il2CppClass : IRuntimeClass
 {
     public nint Ptr { get; }
     public Il2CppClass(nint ptr) => Ptr = ptr;
@@ -45,6 +49,9 @@ public unsafe class Il2CppClass
         var m = Il2CppFunctions.il2cpp_class_get_method_from_name(Ptr, name, paramCount);
         return m != 0 ? new Il2CppMethod(m) : null;
     }
+
+    IRuntimeMethod? IRuntimeClass.GetMethod(string name, int paramCount)
+        => GetMethod(name, paramCount);
 
     public Il2CppMethod? GetMethod(string name, params string[] paramTypes)
     {
@@ -71,6 +78,9 @@ public unsafe class Il2CppClass
         return null;
     }
 
+    IRuntimeMethod? IRuntimeClass.GetMethod(string name, params string[] paramTypes)
+        => GetMethod(name, paramTypes);
+
     // ──── Fields ────
 
     public Il2CppField? GetField(string name)
@@ -78,6 +88,9 @@ public unsafe class Il2CppClass
         var f = Il2CppFunctions.il2cpp_class_get_field_from_name(Ptr, name);
         return f != 0 ? new Il2CppField(f) : null;
     }
+
+    IRuntimeField? IRuntimeClass.GetField(string name)
+        => GetField(name);
 
     public IEnumerable<Il2CppField> GetFields()
     {
@@ -116,7 +129,7 @@ public unsafe class Il2CppClass
     }
 }
 
-public unsafe class Il2CppMethod
+public unsafe class Il2CppMethod : IRuntimeMethod
 {
     public nint Ptr { get; }
     public Il2CppMethod(nint ptr) => Ptr = ptr;
@@ -180,7 +193,7 @@ public unsafe class Il2CppMethod
     }
 }
 
-public unsafe class Il2CppField
+public unsafe class Il2CppField : IRuntimeField
 {
     public nint Ptr { get; }
     public Il2CppField(nint ptr) => Ptr = ptr;

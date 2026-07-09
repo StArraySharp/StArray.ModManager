@@ -81,6 +81,17 @@ inline void Log(const char* fmt, ...) {
     OutputDebugStringA(text); OutputDebugStringA("\n");
     HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
     if (h && h != INVALID_HANDLE_VALUE) { DWORD w; WriteConsoleA(h, text, (DWORD)strlen(text), &w, NULL); WriteConsoleA(h, "\n", 1, &w, NULL); }
+
+    // Rotate: backup old log before first write
+    static bool s_logRotated = false;
+    if (!s_logRotated) {
+        s_logRotated = true;
+        char* logPath = GetDirectoryFile((PCHAR)"log.txt");
+        char* bakPath = GetDirectoryFile((PCHAR)"lastlog.txt");
+        DeleteFileA(bakPath);
+        MoveFileA(logPath, bakPath);
+    }
+
     ofstream f(GetDirectoryFile((PCHAR)"log.txt"), ios::app);
     if (f.is_open()) f << text << endl;
 }

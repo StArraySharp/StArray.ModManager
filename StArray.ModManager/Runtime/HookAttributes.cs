@@ -27,4 +27,17 @@ namespace StArray.ModManager.Hooks
         public Il2CppHookAttribute(string asm, string cls, string method)
         { AssemblyName = asm; ClassName = cls; MethodName = method; }
     }
+
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class MonoHookAttribute : Attribute
+    {
+        public string AssemblyName { get; }
+        public string Namespace { get; }
+        public string ClassName { get; }
+        public string MethodName { get; }
+        public int ParameterCount { get; set; } = -1;
+        public string[] ParameterTypeNames { get; set; }
+        public MonoHookAttribute(string asm, string ns, string cls, string method)
+        { AssemblyName = asm; Namespace = ns; ClassName = cls; MethodName = method; }
+    }
 }

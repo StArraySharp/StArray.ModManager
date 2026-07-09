@@ -47,7 +47,7 @@ add_library(${PROJECT_NAME} SHARED
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")  # no "lib" prefix
 target_include_directories(${PROJECT_NAME} PRIVATE . kiero2 minhook/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE kiero MinHook d3d12 dxgi ${CMAKE_CURRENT_SOURCE_DIR}/libcimgui.a)
+target_link_libraries(${PROJECT_NAME} PRIVATE kiero MinHook d3d11 d3d12 dxgi ${CMAKE_CURRENT_SOURCE_DIR}/libcimgui.a)
 
 # Copy DLL to C# build output
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -57,5 +57,5 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/../bin/${CMAKE_BUILD_TYPE}/net10.0/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:${PROJECT_NAME}>"
-        "D:/Development/RiderProjects/StArray.ModManager/tests/Corehold/managed"
+        "D:/Development/RiderProjects/StArray.ModManager/tests/build/Corehold/managed"
 )

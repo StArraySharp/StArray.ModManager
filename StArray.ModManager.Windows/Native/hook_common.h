@@ -30,7 +30,7 @@ namespace DX12 {
 }
 namespace DX11 { extern ID3D11Device* Device; extern ID3D11DeviceContext* Context; extern ID3D11RenderTargetView* MainRTV;
     extern bool Initialized;
-    void Init(IDXGISwapChain* sc); void Render(IDXGISwapChain* sc); }
+    bool Install(); }
 namespace DX9  { extern IDirect3DDevice9* Device;
     void Init(IDXGISwapChain* sc); void Render(IDXGISwapChain* sc); }
 
