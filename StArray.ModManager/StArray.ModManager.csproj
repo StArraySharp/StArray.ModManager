@@ -23,7 +23,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\fa-solid-900.ttf" />
+    <EmbeddedResource Include="Resources\Font Awesome 7 Free-Solid-900.otf" />
+    <EmbeddedResource Include="Resources\msyh.ttf" />
   </ItemGroup>
 
 </Project>

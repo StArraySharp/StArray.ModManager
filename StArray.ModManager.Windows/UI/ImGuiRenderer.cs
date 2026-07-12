@@ -55,11 +55,7 @@ public sealed unsafe class ImGuiRenderer : IImGuiRenderer
     static IntPtr InitCallback()
     {
         W("[Renderer] Init");
-        ImGui.CreateContext();
-        var io = ImGui.GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard | ImGuiConfigFlags.DockingEnable;
-        var f = @"C:\Windows\Fonts\msyh.ttc";
-        if (File.Exists(f)) io.Fonts.AddFontFromFileTTF(f, 16f, null, io.Fonts.GetGlyphRangesChineseSimplifiedCommon());
+        (s_i as IImGuiRenderer)?.InitImGui();
         return IntPtr.Zero;
     }
 

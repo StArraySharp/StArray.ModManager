@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
+using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
 using StArray.ModManager.RuntimeAbstractions;
@@ -25,13 +26,11 @@ public static class Managed
 
     private static IntPtr ResolveDll(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
-        if (libraryName != "cimgui")
-            return IntPtr.Zero;
-
-        var dllDir = Path.Combine(AppContext.BaseDirectory, "dlls");
-        if (NativeLibrary.TryLoad(Path.Combine(dllDir, "cimgui.dll"), out var handle))
+        if (NativeLibrary.TryLoad(Path.Combine(AppContext.BaseDirectory,libraryName), out var handle))
+        {
+            Write($"[Preload] Loaded {libraryName} from: {AppContext.BaseDirectory}\n");
             return handle;
-
+        }
         return IntPtr.Zero;
     }
 
@@ -70,14 +69,15 @@ public static class Managed
         Writer.AutoFlush = true;
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
 
+        Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(new DirectoryInfo(modsPath).Parent.Parent.FullName,"GameAssembly.dll"));
         // 检测运行时后端 + 图形设备类型
-        RuntimeManager.Detect();
+        //RuntimeManager.Detect();
         Logger.Info("Runtime", $"Detected backend: {RuntimeManager.Backend}");
 
         ModManagerUI modManagerUI = new(new ModLoader(modsPath), managedDir);
 
         // Detect backend and pick renderer
-        var renderer = GetGameRenderer();
+        var renderer = Renderer.D3D11;
         Logger.Info("Backend", $"Detected renderer: {renderer}");
 
         if ((renderer & Renderer.D3D11) != 0)
@@ -85,30 +85,8 @@ public static class Managed
             NativeApi.SetBackend(1); // D3D11
             ImGuiRenderer.OnRender += modManagerUI.Render;
             ImGuiRenderer.Install();
+            return 0;
         }
-        else if ((renderer & Renderer.D3D12) != 0)
-        {
-            NativeApi.SetBackend(0); // D3D12
-            ImGuiRenderer.OnRender += modManagerUI.Render;
-            ImGuiRenderer.Install();
-        }
-        else if ((renderer & Renderer.D3D9) != 0)
-        {
-            NativeApi.SetBackend(2); // D3D9
-            ImGuiRenderer.OnRender += modManagerUI.Render;
-            ImGuiRenderer.Install();
-        }
-        else if ((renderer & Renderer.OpenGL) != 0)
-        {
-            ImGUIGLRenderer.OnRender += modManagerUI.Render;
-            ImGUIGLRenderer.Install();
-        }
-        else
-        {
-            Logger.Error("Backend", "No supported backend");
-            return 1;
-        }
-
         totalSw.Stop();
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;

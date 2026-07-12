@@ -62,34 +62,16 @@ set_target_properties(clrjit PROPERTIES
 set(IMGUI_STATIC OFF CACHE BOOL "" FORCE)
 set(IMGUI_FREETYPE OFF CACHE BOOL "" FORCE)
 
-# Apply cimgui backends patch (--forward skips already-applied hunks)
 set(CIMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libs/cimgui)
-set(CIMGUI_PATCH ${CMAKE_CURRENT_SOURCE_DIR}/libs/cimgui_backends.patch)
-
-if(EXISTS ${CIMGUI_PATCH})
-    execute_process(
-        COMMAND patch --forward -p1 -i ${CIMGUI_PATCH}
-        WORKING_DIRECTORY ${CIMGUI_DIR}
-        RESULT_VARIABLE PATCH_RESULT
-    )
-    if(PATCH_RESULT EQUAL 0)
-        message(STATUS "cimgui backends patch applied")
-    endif()
-endif()
-
-add_subdirectory(libs/cimgui ${CMAKE_CURRENT_BINARY_DIR}/cimgui)
-
-# Clean up stale patch marker (no longer used, dry-run detection replaced it)
-set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
-    "${CIMGUI_DIR}/.backends_patched"
-)
+add_subdirectory(${CIMGUI_DIR} ${CMAKE_CURRENT_BINARY_DIR}/cimgui)
 
 # ---- Include directories (modmanager) ----
 target_include_directories(modmanager
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/core
-        ${CMAKE_CURRENT_SOURCE_DIR}/libs/cimgui
+        ${CIMGUI_DIR}
+        ${CIMGUI_DIR}/imgui
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/dobby/include
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/unityresolve
 )
