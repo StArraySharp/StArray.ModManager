@@ -19,18 +19,31 @@ public static class Managed
     static Managed()
     {
         NativeLibrary.SetDllImportResolver(typeof(Managed).Assembly, ResolveDll);
-        NativeLibrary.SetDllImportResolver(typeof(ImGui).Assembly, ResolveDll);
+        NativeLibrary.SetDllImportResolver(typeof(ImGui).Assembly, (string libraryName, Assembly assembly, DllImportSearchPath? searchPath) =>
+        {
+            if (libraryName.Contains("cimgui"))
+            {
+                // cimgui symbols are compiled into StArray.ModManager.Windows.Native.dll,
+                // which is already loaded by the native host before managed code runs.
+                // Just return that module's handle — no filesystem path needed.
+                var h = Win32Native.GetModuleHandleW(NativeApi.LibraryName + ".dll");
+                if (h != IntPtr.Zero) return h;
+            }
+            return IntPtr.Zero;
+        });
     }
 
     private static StreamWriter Writer = null;
 
     private static IntPtr ResolveDll(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
-        if (NativeLibrary.TryLoad(Path.Combine(AppContext.BaseDirectory,libraryName), out var handle))
+        // Our own Native DLL is already loaded by the host — return its handle.
+        if (libraryName == NativeApi.LibraryName)
         {
-            Write($"[Preload] Loaded {libraryName} from: {AppContext.BaseDirectory}\n");
-            return handle;
+            var h = Win32Native.GetModuleHandleW(NativeApi.LibraryName + ".dll");
+            if (h != IntPtr.Zero) return h;
         }
+        // System DLLs (kernel32, user32, d3d11): let the OS resolve them.
         return IntPtr.Zero;
     }
 
@@ -83,8 +96,8 @@ public static class Managed
         if ((renderer & Renderer.D3D11) != 0)
         {
             NativeApi.SetBackend(1); // D3D11
-            ImGuiRenderer.OnRender += modManagerUI.Render;
-            ImGuiRenderer.Install();
+            ImGuiDXRenderer.OnRender += modManagerUI.Render;
+            ImGuiDXRenderer.Install();
             return 0;
         }
         totalSw.Stop();
@@ -92,22 +105,17 @@ public static class Managed
         return 0;
     }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    static extern bool WriteConsoleW(nint hConsole, string text, uint len, out uint written, nint reserved);
-
     const int STD_OUTPUT_HANDLE = -11;
-
-    [DllImport("kernel32.dll")]
-    static extern nint GetStdHandle(int nStdHandle);
+    static readonly object _writeLock = new();
 
     static void Write(string s)
     {
-        Writer?.Write(s);
-        WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s, (uint)s.Length, out _, 0);
+        lock (_writeLock)
+        {
+            Writer?.Write(s);
+            Win32Native.WriteConsoleW(Win32Native.GetStdHandle(STD_OUTPUT_HANDLE), s, (uint)s.Length, out _, 0);
+        }
     }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr GetModuleHandle(string lpModuleName);
 
     [Flags]
     public enum Renderer
@@ -137,15 +145,15 @@ public static class Managed
             case 13: result |= Renderer.Vulkan;   break;
             default:
                 // 回退到模块名检测（非 Unity 或未知版本）
-                if (GetModuleHandle("d3d12.dll") != IntPtr.Zero)
+                if (Win32Native.GetModuleHandleW("d3d12.dll") != nint.Zero)
                     result |= Renderer.D3D12;
-                if (GetModuleHandle("d3d11.dll") != IntPtr.Zero)
+                if (Win32Native.GetModuleHandleW("d3d11.dll") != nint.Zero)
                     result |= Renderer.D3D11;
-                if (GetModuleHandle("d3d9.dll") != IntPtr.Zero)
+                if (Win32Native.GetModuleHandleW("d3d9.dll") != nint.Zero)
                     result |= Renderer.D3D9;
-                if (GetModuleHandle("opengl32.dll") != IntPtr.Zero)
+                if (Win32Native.GetModuleHandleW("opengl32.dll") != nint.Zero)
                     result |= Renderer.OpenGL;
-                if (GetModuleHandle("vulkan-1.dll") != IntPtr.Zero)
+                if (Win32Native.GetModuleHandleW("vulkan-1.dll") != nint.Zero)
                     result |= Renderer.Vulkan;
                 break;
         }

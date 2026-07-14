@@ -12,7 +12,7 @@ namespace StArray.ModManager.Android.UI;
 /// <summary>
 /// ImGui EGL 渲染器（单文件调试版）
 /// </summary>
-public static unsafe class ImGuiRender
+public static unsafe class ImGuiEGLRendererDebug
 {
     private static bool _initialized;
 
@@ -59,7 +59,7 @@ public static unsafe class ImGuiRender
         }
         catch (Exception ex)
         {
-            Logger.Error(nameof(ImGuiRender), $"OnSwapBuffers error: {ex}");
+            Logger.Error(nameof(ImGuiEGLRendererDebug), $"OnSwapBuffers error: {ex}");
         }
         return _prevSwapBuffersDelegate!(display, surface);
     }
@@ -74,12 +74,12 @@ public static unsafe class ImGuiRender
         }
         
         var glSwapBuffersPtr = NativeLibrary.GetExport(eglLib, "eglSwapBuffers");
-        Dobby.Hook(glSwapBuffersPtr, typeof(ImGuiRender).GetMethod(nameof(OnSwapBuffers))!.MethodHandle.GetFunctionPointer(), out var prevSwapBuffers);
+        Dobby.Hook(glSwapBuffersPtr, typeof(ImGuiEGLRendererDebug).GetMethod(nameof(OnSwapBuffers))!.MethodHandle.GetFunctionPointer(), out var prevSwapBuffers);
         _prevSwapBuffersDelegate = Marshal.GetDelegateForFunctionPointer<SwapBuffersDelegate>(prevSwapBuffers);
         
         string consumerSymbol = "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE";
         IntPtr consumerAddr = Dobby.SymbolResolver("libinput.so", consumerSymbol);
-        Dobby.Hook(consumerAddr, typeof(ImGuiRender).GetMethod(nameof(OnTouchEvent))!.MethodHandle.GetFunctionPointer(),
+        Dobby.Hook(consumerAddr, typeof(ImGuiEGLRendererDebug).GetMethod(nameof(OnTouchEvent))!.MethodHandle.GetFunctionPointer(),
             out var origin);
         _initializeMotionEvent = Marshal.GetDelegateForFunctionPointer<InitializeMotionEventDelegate>(origin);
         
@@ -91,7 +91,7 @@ public static unsafe class ImGuiRender
         _initializeKeyEvent = Marshal.GetDelegateForFunctionPointer<InitializeKeyEventDelegate>(keyOrigin);
         */
         
-        Logger.Error(nameof(ImGuiRender), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
+        Logger.Error(nameof(ImGuiEGLRendererDebug), $"eglSwapBuffers hooked at 0x{glSwapBuffersPtr:X}");
         return true;
     }
 
@@ -117,17 +117,17 @@ public static unsafe class ImGuiRender
     {
         if (_initialized) return;
         GL.LoadBindings(new GLESBindingsContext());
-        Logger.Error(nameof(ImGuiRender), "Initializing ImGui with official backends...");
+        Logger.Error(nameof(ImGuiEGLRendererDebug), "Initializing ImGui with official backends...");
         
         // 从 EGL surface 获取 ANativeWindow
         if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
             !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
         {
-            Logger.Error(nameof(ImGuiRender), "Failed to query EGL surface for initialization");
+            Logger.Error(nameof(ImGuiEGLRendererDebug), "Failed to query EGL surface for initialization");
             return;
         }
         
-        Logger.Error(nameof(ImGuiRender), $"Surface size: {width}x{height}");
+        Logger.Error(nameof(ImGuiEGLRendererDebug), $"Surface size: {width}x{height}");
         
         // 创建 ImGui 上下文
         ImGui.CreateContext();
@@ -149,7 +149,7 @@ public static unsafe class ImGuiRender
             {
                 var cjk = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
                 io.Fonts.AddFontFromFileTTF(path, 16.0f, null, cjk);
-                Logger.Info(nameof(ImGuiRender), $"CJK font: {path}");
+                Logger.Info(nameof(ImGuiEGLRendererDebug), $"CJK font: {path}");
                 cjkLoaded = true;
                 break;
             }
@@ -171,14 +171,14 @@ public static unsafe class ImGuiRender
         if (nativeWindow != IntPtr.Zero)
         {
             ImGuiImplAndroid.Init(nativeWindow);
-            Logger.Error(nameof(ImGuiRender),
+            Logger.Error(nameof(ImGuiEGLRendererDebug),
                 $"ImGui_ImplAndroid_Init success: 0x{nativeWindow:X}");
         }
 
         ImGuiImplOpenGL3.Init();
 
         _initialized = true;
-        Logger.Error(nameof(ImGuiRender), "ImGui initialized");
+        Logger.Error(nameof(ImGuiEGLRendererDebug), "ImGui initialized");
     }
 
 
@@ -581,7 +581,7 @@ void main(){
         GC.KeepAlive(cbBind);
         GC.KeepAlive(cbUnbind);
 
-        Logger.Info(nameof(ImGuiRender), "Rainbow shader compiled");
+        Logger.Info(nameof(ImGuiEGLRendererDebug), "Rainbow shader compiled");
     }
 
     static bool CheckCompile(int shader, string tag)
@@ -590,7 +590,7 @@ void main(){
         if (ok == 0)
         {
             string log = GL.GetShaderInfoLog(shader);
-            Logger.Error(nameof(ImGuiRender), $"Shader {tag}: {log}");
+            Logger.Error(nameof(ImGuiEGLRendererDebug), $"Shader {tag}: {log}");
             return false;
         }
         return true;
@@ -602,7 +602,7 @@ void main(){
         if (ok == 0)
         {
             string log = GL.GetProgramInfoLog(prog);
-            Logger.Error(nameof(ImGuiRender), $"Link: {log}");
+            Logger.Error(nameof(ImGuiEGLRendererDebug), $"Link: {log}");
             GL.DeleteProgram(prog);
             return false;
         }

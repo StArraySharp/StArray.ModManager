@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using ImGuiNET;
+using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
 using StArray.ModManager.UI;
 using StArray.ModManager.Windows.Native;
@@ -55,7 +56,7 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
                 HookHelper.Instance.Hook(rp, Marshal.GetFunctionPointerForDelegate(new ResizeDel(HookResize))));
 
             if (s_pending != null) { _onRender += s_pending; s_pending = null; }
-            _ok = true; Log("OK"); return true;
+            _ok = true; Logger.Info(nameof(D3D11Renderer), "OK"); return true;
         }
         catch (Exception e) { return Fail($"Install: {e}"); }
     }
@@ -83,12 +84,12 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
 
             // Desc → DisplaySize
             var d = ReadDesc(sc);
-            ImGui.GetIO().DisplaySize = new System.Numerics.Vector2(d.W, d.H);
+            ImGui.GetIO().DisplaySize = new System.Numerics.Vector2(d.Width, d.Height);
 
             ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
             ImGui.NewFrame();
-            try { _onRender(); } catch (Exception ex) { Log($"r: {ex}"); }
+            try { _onRender(); } catch (Exception ex) { Logger.Error(nameof(D3D11Renderer), $"Render: {ex}"); }
             ImGui.EndFrame(); ImGui.Render();
 
             if (_rtv != 0)
@@ -98,7 +99,7 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
             }
             ImGui_ImplDX11_RenderDrawData(ImGui.GetDrawData());
         }
-        catch (Exception ex) { Log($"p: {ex}"); }
+        catch (Exception ex) { Logger.Error(nameof(D3D11Renderer), $"Present: {ex}"); }
         return _origPresent!(sc, sync, flags);
     }
 
@@ -123,19 +124,19 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
 
         // GetDesc → hwnd
         var d = ReadDesc(sc);
-        _hwnd = d.Hwnd;
-        Log($"dev={_dev:X} ctx={_ctx:X} hwnd={_hwnd:X}");
+        _hwnd = d.OutputWindow;
+        Logger.Info(nameof(D3D11Renderer), $"dev={_dev:X} ctx={_ctx:X} hwnd={_hwnd:X}");
 
         // WndProc
         _wndDel = WndHook;
-        _origWnd = Win32.SetWindowLongPtrW(_hwnd, -4, Marshal.GetFunctionPointerForDelegate(_wndDel));
+        _origWnd = Win32Native.SetWindowLongPtrW(_hwnd, -4, Marshal.GetFunctionPointerForDelegate(_wndDel));
 
         // ImGui
         ImGui.CreateContext();
         ImGui.GetIO().ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard | ImGuiConfigFlags.DockingEnable;
         ImGui_ImplWin32_Init(_hwnd);
         ImGui_ImplDX11_Init(_dev, _ctx);
-        _inited = true; Log("ImGui ready");
+        _inited = true; Logger.Info(nameof(D3D11Renderer), "ImGui ready");
     }
 
     // ── QI helper (COM QueryInterface-like via vtable index) ──
@@ -148,24 +149,13 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
     nint WndHook(nint h, uint m, nint w, nint l)
     {
         if (ImGui_ImplWin32_WndProcHandler(h, m, w, l) != 0) return 1;
-        return Win32.CallWindowProcW(_origWnd, h, m, w, l);
+        return Win32Native.CallWindowProcW(_origWnd, h, m, w, l);
     }
 
-    // ── SWAP_CHAIN_DESC (blittable minimal) ──
-    struct Desc
+    static Win32Native.DXGISwapChainDesc ReadDesc(nint sc)
     {
-        public int W, H;
-        public int _1, _2, _3, _4, _5;
-        public int _sc, _sq;
-        public uint _usage;
-        public int _bufCount;
-        public nint Hwnd;
-    }
-
-    static Desc ReadDesc(nint sc)
-    {
-        var d = new Desc();
-        ((delegate* unmanaged[Stdcall]<nint, Desc*, int>)Vtbl(sc)[12])(sc, &d);
+        var d = new Win32Native.DXGISwapChainDesc();
+        ((delegate* unmanaged[Stdcall]<nint, Win32Native.DXGISwapChainDesc*, int>)Vtbl(sc)[12])(sc, &d);
         return d;
     }
 
@@ -173,10 +163,10 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
     static nint CreateDummy()
     {
         var hwnd = Win32.CreateDummyWindow();
-        var sd = new Desc { W = 1, H = 1, _usage = 0x20, _bufCount = 1, _sc = 1, Hwnd = hwnd };
-        // _5 = Format = 28 (DXGI_FORMAT_R8G8B8A8_UNORM)
-        sd._5 = 28;
-        var hr = D3D11CreateDeviceAndSwapChain(
+        var sd = new Win32Native.DXGISwapChainDesc { Width = 1, Height = 1, BufferUsage = 0x20, BufferCount = 1, SampleCount = 1, OutputWindow = hwnd };
+        // Format = 28 (DXGI_FORMAT_R8G8B8A8_UNORM)
+        sd.Format = 28;
+        var hr = Win32Native.D3D11CreateDeviceAndSwapChain(
             0, 1, 0, 0, 0, 0, 7,
             ref sd, out var sc, out var dev, out var ctx);
         if (hr != 0) return 0;
@@ -194,13 +184,7 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
     static Guid Guid_Context => new("c0bfa96c-e089-44fb-8eaf-26f87994ae84");
     static Guid Guid_Texture2D => new("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
 
-    bool Fail(string m) { Log(m); return false; }
-
-    [DllImport("d3d11.dll")]
-    static extern int D3D11CreateDeviceAndSwapChain(
-        nint a, uint dt, nint sw, uint f,
-        nint fl, uint l, uint sv,
-        ref Desc d, out nint sc, out nint dev, out nint ctx);
+    bool Fail(string m) { Logger.Error(nameof(D3D11Renderer), m); return false; }
 
     [DllImport("cimgui", CallingConvention = CallingConvention.Cdecl)]
     static extern bool ImGui_ImplWin32_Init(nint hwnd);
@@ -214,8 +198,6 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
     static extern void ImGui_ImplDX11_NewFrame();
     [DllImport("cimgui", CallingConvention = CallingConvention.Cdecl)]
     static extern void ImGui_ImplDX11_RenderDrawData(ImDrawDataPtr dd);
-
-    static void Log(string m) => System.Diagnostics.Debug.WriteLine($"[D3D11] {m}");
 }
 
 static class Win32
@@ -227,54 +209,25 @@ static class Win32
 
     public static nint CreateDummyWindow()
     {
-        var inst = GetModuleHandleW(null);
-        _dummyWnd = (h, m, wp, lp) => DefWindowProcW(h, m, wp, lp);
-        var wc = new WNDCLASSEX
+        var inst = Win32Native.GetModuleHandleW(null);
+        _dummyWnd = (h, m, wp, lp) => Win32Native.DefWindowProcW(h, m, wp, lp);
+        var wc = new Win32Native.WNDCLASSEX
         {
-            cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
+            cbSize = (uint)Marshal.SizeOf<Win32Native.WNDCLASSEX>(),
             lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_dummyWnd),
             hInstance = inst,
             lpszClassName = "D3D11HookDummy",
         };
-        RegisterClassExW(ref wc);
-        _dummyHwnd = CreateWindowExW(0, "D3D11HookDummy", "", 0, 0, 0, 1, 1, 0, 0, inst, 0);
+        Win32Native.RegisterClassExW(ref wc);
+        _dummyHwnd = Win32Native.CreateWindowExW(0, "D3D11HookDummy", "", 0, 0, 0, 1, 1, 0, 0, inst, 0);
         return _dummyHwnd;
     }
 
     public static void DestroyWindow(nint h)
     {
-        User32.DestroyWindow(h);
-        User32.UnregisterClassW("D3D11HookDummy", GetModuleHandleW(null));
+        Win32Native.DestroyWindow(h);
+        Win32Native.UnregisterClassW("D3D11HookDummy", Win32Native.GetModuleHandleW(null));
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    struct WNDCLASSEX
-    {
-        public uint cbSize; public uint style; public nint lpfnWndProc;
-        public int cbClsExtra, cbWndExtra;
-        public nint hInstance, hIcon, hCursor, hbrBackground;
-        public nint lpszMenuName; public string lpszClassName; public nint hIconSm;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    public static extern nint GetModuleHandleW(string? name);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    static extern ushort RegisterClassExW(ref WNDCLASSEX wc);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern nint CreateWindowExW(uint ex, string cls, string name, uint style,
-        int x, int y, int w, int h, nint p, nint m, nint i, nint p2);
-    [DllImport("user32.dll")]
-    public static extern nint DefWindowProcW(nint h, uint m, nint w, nint l);
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern nint SetWindowLongPtrW(nint h, int n, nint d);
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern nint CallWindowProcW(nint p, nint h, uint m, nint w, nint l);
 }
 
-static class User32
-{
-    [DllImport("user32.dll")]
-    public static extern byte DestroyWindow(nint h);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern byte UnregisterClassW(string cls, nint inst);
-}
+

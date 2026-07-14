@@ -7,6 +7,7 @@ using ImGuiNET;
 using StArray.ModManager.Inspector;
 using StArray.ModManager.Resources;
 using StArray.ModManager.Runtime;
+using StArray.ModManager.Behaviours;
 
 namespace StArray.ModManager.Manager;
 
@@ -27,6 +28,7 @@ public partial class ModManagerUI
     private float _toastTimer;
 
     private bool _configApplied;
+    private float _lastFrameTime;
 
     /// <summary>初始化 UI，加载配置并扫描 Mod</summary>
     public ModManagerUI(ModLoader modManager, string configDir)
@@ -122,6 +124,13 @@ public partial class ModManagerUI
             _configApplied = true;
         }
 
+        // ── BehaviourManager: 处理增删 + OnStart/OnUpdate（窗口绘制之前） ──
+        var now = (float)ImGui.GetTime();
+        var delta = _lastFrameTime > 0 ? now - _lastFrameTime : 1f / 60f;
+        _lastFrameTime = now;
+        BehaviourManager.ProcessPending();
+        BehaviourManager.Update(delta);
+
         // 背景层：每个 Mod 在 ImGui 窗口下方绘制
         var bgDrawList = ImGui.GetBackgroundDrawList();
         foreach (var mod in _modManager.Mods)
@@ -134,6 +143,9 @@ public partial class ModManagerUI
         RenderModSettingsWindow();
         RenderAddModPopup();
         RenderToast();
+
+        // ── BehaviourManager: OnGUI（ImGui 窗口绘制之后） ──
+        BehaviourManager.GUI(bgDrawList);
 
         // 前景层：每个 Mod 在 ImGui 窗口上方绘制
         var fgDrawList = ImGui.GetForegroundDrawList();

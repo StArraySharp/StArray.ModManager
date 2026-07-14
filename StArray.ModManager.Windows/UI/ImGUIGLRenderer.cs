@@ -50,15 +50,6 @@ public sealed unsafe class ImGUIGLRenderer : IImGuiRenderer
     public bool IsInitialized => _initialized;
     bool IImGuiRenderer.Install() => InstallInstance();
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr WindowFromDC(IntPtr hdc);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
     private const int GWLP_WNDPROC = -4;
 
     private bool InstallInstance()
@@ -99,23 +90,16 @@ public sealed unsafe class ImGUIGLRenderer : IImGuiRenderer
 
     private void TryInitImGui(IntPtr hdc)
     {
-        _hwnd = WindowFromDC(hdc);
+        _hwnd = Win32Native.WindowFromDC(hdc);
         if (_hwnd == nint.Zero) { _imguiInited = false; return; }
 
-        var ctx = ImGui.CreateContext();
-        ImGui.SetCurrentContext(ctx);
-        var io = ImGui.GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard | ImGuiConfigFlags.DockingEnable;
-
-        var yaheiPath = @"C:\Windows\Fonts\msyh.ttc";
-        if (File.Exists(yaheiPath))
-            io.Fonts.AddFontFromFileTTF(yaheiPath, 16.0f, null,
-                io.Fonts.GetGlyphRangesChineseSimplifiedCommon());
+        // 统一字体初始化：msyh + FA 图标
+        ((IImGuiRenderer)this).InitImGui();
 
         if (!ImGui_ImplWin32_Init(_hwnd)) { _imguiInited = false; return; }
         if (!ImGui_ImplOpenGL3_Init()) { _imguiInited = false; return; }
 
-        _origWndProc = SetWindowLongPtr(_hwnd, GWLP_WNDPROC,
+        _origWndProc = Win32Native.SetWindowLongPtrW(_hwnd, GWLP_WNDPROC,
             Marshal.GetFunctionPointerForDelegate(new WndProcDelegate(WndProcHook)));
 
         _imguiInited = true;
@@ -128,7 +112,7 @@ public sealed unsafe class ImGUIGLRenderer : IImGuiRenderer
     {
         if (_imguiInited && ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
             return (IntPtr)1;
-        return CallWindowProc(_origWndProc, hWnd, msg, wParam, lParam);
+        return Win32Native.CallWindowProcW(_origWndProc, hWnd, msg, wParam, lParam);
     }
 
     // ─── cimgui P/Invoke ─────────────────────────────

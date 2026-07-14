@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 cmake_policy(SET CMP0091 NEW)
 project(cimgui)
 
-set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 20)
 
 if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_tables.cpp)
 	set(TABLES_SOURCE "imgui/imgui_tables.cpp")
@@ -47,33 +47,8 @@ endif()
 set(IMGUI_SOURCES ${IMGUI_BASE_SOURCES})
 
 set(IMGUI_STATIC "no" CACHE STRING "Build as a static library")
-set(IMGUI_FREETYPE "yes" CACHE STRING "Build with freetype library (static)")
+set(IMGUI_FREETYPE "no" CACHE STRING "Build with freetype library (static)")
 set(IMGUI_LIBRARIES )
-
-if(IMGUI_FREETYPE)
-	message(STATUS "Building with freetype (static, from git)")
-	include(FetchContent)
-	set(FT_DISABLE_HARFBUZZ TRUE CACHE BOOL "" FORCE)
-	set(FT_DISABLE_BZIP2 TRUE CACHE BOOL "" FORCE)
-	set(FT_DISABLE_PNG TRUE CACHE BOOL "" FORCE)
-	set(FT_DISABLE_ZLIB TRUE CACHE BOOL "" FORCE)
-	set(FT_DISABLE_BROTLI TRUE CACHE BOOL "" FORCE)
-	if(MINGW OR MSYS)
-		# MSYS2: freetype needs WIN32 to pick Windows backend
-		set(SAVED_WIN32 ${WIN32})
-		set(WIN32 TRUE)
-	endif()
-	FetchContent_Declare(freetype
-		GIT_REPOSITORY https://github.com/freetype/freetype.git
-		GIT_TAG VER-2-13-3
-	)
-	FetchContent_MakeAvailable(freetype)
-	if(MINGW OR MSYS)
-		set(WIN32 ${SAVED_WIN32})
-	endif()
-	list(APPEND IMGUI_LIBRARIES freetype)
-	list(APPEND IMGUI_SOURCES imgui/misc/freetype/imgui_freetype.cpp)
-endif(IMGUI_FREETYPE)
 
 #add library and link
 if (IMGUI_STATIC)

@@ -164,37 +164,13 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
 
         Logger.Error(nameof(ImGuiEGLRenderer), $"Surface size: {width}x{height}");
 
-        // 创建 ImGui 上下文
-        ImGui.CreateContext();
+        // 创建 ImGui 上下文 + 加载嵌入式字体 msyh + FA 图标（共享接口）
+        ((IImGuiRenderer)this).InitImGui();
         ImGuiInputHandler.IsInitialized = true;
 
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
-
-        // 设置缩放
         io.FontGlobalScale = 3.0f;
-
-        // 加载中文字体作为默认字体（含 ASCII + CJK）
-        string[] cjkPaths = [
-            "/system/fonts/NotoSansCJK-Regular.ttc",
-        ];
-        bool cjkLoaded = false;
-        foreach (var path in cjkPaths)
-        {
-            if (File.Exists(path))
-            {
-                var cjk = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
-                io.Fonts.AddFontFromFileTTF(path, 16.0f, null, cjk);
-                Logger.Info(nameof(ImGuiEGLRenderer), $"CJK font: {path}");
-                cjkLoaded = true;
-                break;
-            }
-        }
-        if (!cjkLoaded)
-            io.Fonts.AddFontDefault(); // 兜底
-
-        // 合并 FontAwesome 图标字体（merge mode，私用区 U+E005~U+F8FF）
-        LoadFontAwesome(io);
 
         // 设置样式
         var style = ImGui.GetStyle();
@@ -228,40 +204,6 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
     private void BuildUI()
     {
         _onRender?.Invoke();
-    }
-
-    /// <summary>
-    /// 从嵌入资源加载 FontAwesome 图标字体，合并到 CJK 字体 atlas
-    /// </summary>
-    private static void LoadFontAwesome(ImGuiIOPtr io)
-    {
-        try
-        {
-            var asm = typeof(ImGuiEGLRenderer).Assembly;
-            using var stream = asm.GetManifestResourceStream(
-                "StArray.ModManager.Resources.fa-solid-900.ttf");
-            if (stream == null) return;
-
-            var ttf = new byte[stream.Length];
-            stream.ReadExactly(ttf);
-            var ptr = Marshal.AllocHGlobal(ttf.Length);
-            Marshal.Copy(ttf, 0, ptr, ttf.Length);
-
-            // merge mode: 追加到已有字体，不替换
-            var cfg = ImGuiNative.ImFontConfig_ImFontConfig();
-            cfg->MergeMode = 1;
-
-            // FontAwesome 7 图标范围（私用区）
-            ushort[] iconRange = [0xe005, 0xf8ff, 0];
-
-            fixed (ushort* r = iconRange)
-                io.Fonts.AddFontFromMemoryTTF(ptr, ttf.Length, 16f, cfg, (IntPtr)r);
-
-            io.Fonts.Build();
-            Logger.Info(nameof(ImGuiEGLRenderer),
-                $"FontAwesome merged ({ttf.Length} bytes)");
-        }
-        catch { /* 找不到资源则静默跳过 */ }
     }
 }
 

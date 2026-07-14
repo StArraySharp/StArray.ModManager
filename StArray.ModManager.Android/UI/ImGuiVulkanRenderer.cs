@@ -390,17 +390,11 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             $"Initializing ImGui Vulkan backend... Device=0x{_device:X} " +
             $"PhysicalDevice=0x{_physicalDevice:X} Queue=0x{_queue:X} Family={_queueFamily}");
 
-        // 创建 ImGui 上下文
-        ImGui.CreateContext();
+        // 创建 ImGui 上下文 + 加载嵌入式字体 msyh + FA 图标（共享接口）
+        ((IImGuiRenderer)this).InitImGui();
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.FontGlobalScale = 3.0f;
-
-        // 加载中文字体
-        LoadCJKFont(io);
-
-        // 加载 FontAwesome 嵌入式资源字体
-        LoadEmbeddedFontAwesome(io);
 
         // 设置样式
         var style = ImGui.GetStyle();
@@ -602,51 +596,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
         _fbHeight = 2400;
     }
 
-    // ===== 字体加载 =====
-
-    private static void LoadCJKFont(ImGuiIOPtr io)
-    {
-        string[] cjkPaths = ["/system/fonts/NotoSansCJK-Regular.ttc"];
-        bool loaded = false;
-        foreach (var path in cjkPaths)
-        {
-            if (File.Exists(path))
-            {
-                var range = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
-                io.Fonts.AddFontFromFileTTF(path, 16.0f, null, range);
-                Logger.Info(nameof(ImGuiVulkanRenderer), $"CJK font: {path}");
-                loaded = true;
-                break;
-            }
-        }
-        if (!loaded)
-            io.Fonts.AddFontDefault();
-    }
-
-    private static void LoadEmbeddedFontAwesome(ImGuiIOPtr io)
-    {
-        try
-        {
-            var asm = typeof(ImGuiVulkanRenderer).Assembly;
-            using var stream = asm.GetManifestResourceStream("StArray.ModManager.Resources.fa-solid-900.ttf");
-            if (stream == null) return;
-
-            var data = new byte[stream.Length];
-            stream.ReadExactly(data);
-
-            var ptr = Marshal.AllocHGlobal(data.Length);
-            Marshal.Copy(data, 0, ptr, data.Length);
-
-            io.Fonts.AddFontFromMemoryTTF(ptr, data.Length, 16.0f, IntPtr.Zero,
-                io.Fonts.GetGlyphRangesDefault());
-            io.Fonts.Build();
-            Logger.Info(nameof(ImGuiVulkanRenderer), $"FA font loaded ({data.Length} bytes)");
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(nameof(ImGuiVulkanRenderer), $"FA font: {ex.Message}");
-        }
-    }
+    // ===== 渲染 =====
 
     private void BuildUI()
     {

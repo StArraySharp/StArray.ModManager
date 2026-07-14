@@ -24,12 +24,23 @@ public interface IImGuiRenderer
     /// </summary>
     void InitImGui()
     {
-        ImGui.CreateContext();
+        ImGui.SetCurrentContext(ImGui.CreateContext());
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard | ImGuiConfigFlags.DockingEnable;
         LoadIconFont(io);
         LoadEmbeddedFont(io);
+        // 注意：AddFontFromMemoryTTF 只存指针，Build() 时才真正读取数据
         io.Fonts.Build();
+        // Build() 之后才能安全释放字体内存
+        FreeFontMemory();
+    }
+
+    private static nint _fontPtr1, _fontPtr2;
+
+    private static void FreeFontMemory()
+    {
+        if (_fontPtr1 != 0) { Marshal.FreeHGlobal(_fontPtr1); _fontPtr1 = 0; }
+        if (_fontPtr2 != 0) { Marshal.FreeHGlobal(_fontPtr2); _fontPtr2 = 0; }
     }
 
     private static unsafe void LoadEmbeddedFont(ImGuiIOPtr io)
@@ -43,16 +54,17 @@ public interface IImGuiRenderer
 
             var ttf = new byte[stream.Length];
             stream.ReadExactly(ttf);
-            var ptr = Marshal.AllocHGlobal(ttf.Length);
-            Marshal.Copy(ttf, 0, ptr, ttf.Length);
+            _fontPtr1 = Marshal.AllocHGlobal(ttf.Length);
+            Marshal.Copy(ttf, 0, _fontPtr1, ttf.Length);
 
             // MergeMode: 中文字形合并到图标基础字体
             var cfg = ImGuiNative.ImFontConfig_ImFontConfig();
             cfg->MergeMode = 1;
+            cfg->FontDataOwnedByAtlas = 0; // 自己管理内存，Build() 后释放
 
             var glyphRanges = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
-            io.Fonts.AddFontFromMemoryTTF(ptr, ttf.Length, 16f, cfg, glyphRanges);
-            Marshal.FreeHGlobal(ptr);
+            io.Fonts.AddFontFromMemoryTTF(_fontPtr1, ttf.Length, 16f, cfg, glyphRanges);
+            ImGuiNative.ImFontConfig_destroy(cfg);
         }
         catch { /* 静默跳过 */ }
     }
@@ -63,20 +75,22 @@ public interface IImGuiRenderer
         {
             var asm = typeof(IImGuiRenderer).Assembly;
             using var stream = asm.GetManifestResourceStream(
-                "StArray.ModManager.Resources.Font Awesome 7 Free-Solid-900.otf");
+                "StArray.ModManager.Resources.fa-solid-900.ttf");
             if (stream == null) return;
 
             var ttf = new byte[stream.Length];
             stream.ReadExactly(ttf);
-            var ptr = Marshal.AllocHGlobal(ttf.Length);
-            Marshal.Copy(ttf, 0, ptr, ttf.Length);
+            _fontPtr2 = Marshal.AllocHGlobal(ttf.Length);
+            Marshal.Copy(ttf, 0, _fontPtr2, ttf.Length);
 
             // 基础字体：FontAwesome 7 图标
+            var cfg = ImGuiNative.ImFontConfig_ImFontConfig();
+            cfg->FontDataOwnedByAtlas = 0; // 自己管理内存
+
             ushort[] iconRange = [0xe005, 0xf8ff, 0];
             fixed (ushort* r = iconRange)
-                io.Fonts.AddFontFromMemoryTTF(ptr, ttf.Length, 16f, null, (IntPtr)r);
-
-            Marshal.FreeHGlobal(ptr);
+                io.Fonts.AddFontFromMemoryTTF(_fontPtr2, ttf.Length, 16f, cfg, (IntPtr)r);
+            ImGuiNative.ImFontConfig_destroy(cfg);
         }
         catch { /* 静默跳过 */ }
     }

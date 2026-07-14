@@ -5,7 +5,7 @@ namespace StArray.ModManager.Windows.Native;
 
 public class MinHook : IHook
 {
-    private const string Lib = "MinHook.x64";
+    private const string Lib = NativeApi.LibraryName;
 
     private enum Status : int
     {
@@ -30,12 +30,6 @@ public class MinHook : IHook
 
     [DllImport(Lib, EntryPoint = "MH_RemoveHook")]
     private static extern Status _RemoveHook(nint target);
-
-    // Win32
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern nint GetModuleHandle(string? lpModuleName);
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi)]
-    private static extern nint GetProcAddress(nint hModule, string lpProcName);
 
     private bool _initialized;
 
@@ -68,10 +62,10 @@ public class MinHook : IHook
         var dllName = library.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? library : library + ".dll";
 
         // 1) 从已加载的模块获取
-        var mod = GetModuleHandle(dllName);
+        var mod = Win32Native.GetModuleHandleW(dllName);
         if (mod != nint.Zero)
         {
-            var addr = GetProcAddress(mod, name);
+            var addr = Win32Native.GetProcAddress(mod, name);
             if (addr != nint.Zero) return addr;
         }
 

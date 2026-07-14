@@ -36,9 +36,9 @@
             <NativeOutput>$(OutputPath)test_native.dll</NativeOutput>
             <_Gcc>gcc</_Gcc>
         </PropertyGroup>
-        <Exec Command="&quot;$(_Gcc)&quot; -shared -O2 -Wall -Werror -o &quot;$(NativeOutput)&quot; &quot;$(NativeSource)&quot;"
+        <!-- <Exec Command="&quot;$(_Gcc)&quot; -shared -O2 -Wall -Werror -o &quot;$(NativeOutput)&quot; &quot;$(NativeSource)&quot;"
               ConsoleToMSBuild="true" />
-        <Message Text="test_native.dll compiled" Importance="high" />
+        <Message Text="test_native.dll compiled" Importance="high" /> -->
     </Target>
 
 </Project>
