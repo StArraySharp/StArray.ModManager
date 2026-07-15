@@ -66,3 +66,5 @@ tests
 *.log
 !*.slnx.backup/
 Android/library/src/main/cpp/CMakeFiles/
+
+*.i

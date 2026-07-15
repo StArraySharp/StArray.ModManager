@@ -1,3 +1,4 @@
+/*
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -141,7 +142,7 @@ float4 ps_main(vs_out input) : SV_TARGET {
             "vs_main", "vs_5_0", 0, 0,
             ref vertexCode, ref vertexErrors);
 
-        if (hr.IsFailure)
+        if (hr.GetTypeCod)
         {
             if (vertexErrors.Handle is not null)
                 Console.WriteLine(SilkMarshal.PtrToString((nint)vertexErrors.GetBufferPointer()));
@@ -280,3 +281,4 @@ float4 ps_main(vs_out input) : SV_TARGET {
         _dxgi.Dispose();
     }
 }
+*/

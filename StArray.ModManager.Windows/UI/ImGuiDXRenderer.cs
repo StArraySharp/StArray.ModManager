@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
 using StArray.ModManager.Manager;
@@ -22,18 +21,26 @@ public sealed unsafe class ImGuiDXRenderer : IImGuiRenderer
 
     bool _ok; Action _onRender = () => { };
 
+    static NativeApi.ImGuiInitCallback?    _sInit;
+    static NativeApi.ImGuiShutdownCallback? _sShutdown;
+    static NativeApi.ImGuiRenderCallback?   _sRender;
+
     event Action IImGuiRenderer.OnRender { add => _onRender += value; remove => _onRender -= value; }
     public bool IsInitialized => _ok;
     bool IImGuiRenderer.Install() => InstallInstance();
 
-    unsafe bool InstallInstance()
+    bool InstallInstance()
     {
         try
         {
+            _sInit = InitCallback;
+            _sShutdown = ShutdownCallback;
+            _sRender = RenderCallback;
+
             int r = NativeApi.Init(
-                (nint)(delegate* unmanaged[Cdecl]<IntPtr>)&InitCallback,
-                (nint)(delegate* unmanaged[Cdecl]<void>)&ShutdownCallback,
-                (nint)(delegate* unmanaged[Cdecl]<void>)&RenderCallback);
+                Marshal.GetFunctionPointerForDelegate(_sInit),
+                Marshal.GetFunctionPointerForDelegate(_sShutdown),
+                Marshal.GetFunctionPointerForDelegate(_sRender));
             Logger.Info(nameof(ImGuiDXRenderer), $"NativeInit={r}");
 
             if (s_pending != null) { _onRender += s_pending; s_pending = null; }
@@ -43,23 +50,20 @@ public sealed unsafe class ImGuiDXRenderer : IImGuiRenderer
         catch (Exception e) { Logger.Error(nameof(ImGuiDXRenderer), $"fail: {e.Message}"); return false; }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     static IntPtr InitCallback()
     {
-        Logger.Info(nameof(ImGuiDXRenderer), "Native Init");
+        Logger.Info(nameof(ImGuiDXRenderer), "Init");
         if (s_i != null)
             (s_i as IImGuiRenderer).InitImGui();
         return IntPtr.Zero;
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     static void ShutdownCallback()
     {
         Logger.Info(nameof(ImGuiDXRenderer), "Shutdown");
         ImGui.DestroyContext();
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     static void RenderCallback()
     {
         if (s_i == null) return;
