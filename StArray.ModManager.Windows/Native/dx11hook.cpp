@@ -1,5 +1,8 @@
 // DX11 Present hook — cimgui-based ImGui overlay
 #include "hook_common.h"
+#include "cimgui.h"
+#include "kiero.hpp"
+#include "kiero_d3d11.hpp"
 
 typedef HRESULT(APIENTRY* PresentFn)(IDXGISwapChain*, UINT, UINT);
 
@@ -38,6 +41,8 @@ namespace DX11Hook {
         return CallWindowProcW(g_OriginalWndProc, h, m, w, l);
     }
 
+    ID3D11RenderTargetView *MainRTV = nullptr;
+
     HRESULT HookPresent(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags) {
         if (!Initialised) {
             DXGI_SWAP_CHAIN_DESC desc;
@@ -48,6 +53,7 @@ namespace DX11Hook {
             swapChain->GetDevice(__uuidof(ID3D11Device), (void**)&device);
             device->GetImmediateContext(&DeviceContext);
             if (imgui_callbacks.init_callback) imgui_callbacks.init_callback();
+
             if (ImGui_ImplWin32_Init(g_GameWindow) && ImGui_ImplDX11_Init(device, DeviceContext)) {
                 SwapChain = swapChain;
                 g_OriginalWndProc = (WNDPROC)SetWindowLongPtrW(g_GameWindow,
@@ -56,68 +62,59 @@ namespace DX11Hook {
                 ImGui_Initialised = true;
                 DEBUG_LOG("DX11Hook: ImGui initialised, hwnd=%p", g_GameWindow);
             }
-
-            device->Release();
         }
 
         if (Initialised) {
+            /*if (MainRTV) { MainRTV->Release(); MainRTV = nullptr; }
+            ID3D11Texture2D* bb = nullptr;
+            swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&bb);
+            ID3D11Device* device = nullptr;
+            swapChain->GetDevice(__uuidof(ID3D11Device), (void**)&device);
+            if (bb) { device->CreateRenderTargetView(bb, nullptr, &MainRTV); bb->Release(); }
+            */
+
             ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
+            auto io = igGetIO();
+            DXGI_SWAP_CHAIN_DESC desc;
+            swapChain->GetDesc(&desc);
+            io->DisplaySize.x = desc.BufferDesc.Width;
+            io->DisplaySize.y = desc.BufferDesc.Height;
             if (imgui_callbacks.render_callback) imgui_callbacks.render_callback();
             ImGui_ImplDX11_RenderDrawData(igGetDrawData());
+
+            //if (MainRTV) DeviceContext->OMSetRenderTargets(1, &MainRTV, nullptr);
         }
 
         return OriginalPresent(swapChain, syncInterval, flags);
     }
 
     bool InstallHook() {
-        DEBUG_LOG("DX11Hook::InstallHook: creating dummy device...");
+        DEBUG_LOG("DX11Hook::InstallHook: locating D3D11 methods via kiero...");
 
-        WNDCLASSEXW wc = {};
-        wc.cbSize = sizeof(wc);
-        wc.lpfnWndProc = DefWindowProcW;
-        wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = L"DX11HookDummy";
-        RegisterClassExW(&wc);
-
-        HWND dummy = CreateWindowExW(0, L"DX11HookDummy", L"", WS_POPUP,
-            0, 0, 1, 1, nullptr, nullptr, wc.hInstance, nullptr);
-
-        DXGI_SWAP_CHAIN_DESC scd = {};
-        scd.BufferCount = 1;
-        scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        scd.BufferDesc.Width = 1;
-        scd.BufferDesc.Height = 1;
-        scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        scd.OutputWindow = dummy;
-        scd.SampleDesc.Count = 1;
-        scd.Windowed = TRUE;
-
-        ID3D11Device* tmpDevice = nullptr;
-        IDXGISwapChain* tmpSwapChain = nullptr;
-        ID3D11DeviceContext* tmpContext = nullptr;
-
-        bool ok = false;
-        if (SUCCEEDED(D3D11CreateDeviceAndSwapChain(
-                nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
-                nullptr, 0, D3D11_SDK_VERSION,
-                &scd, &tmpSwapChain, &tmpDevice, nullptr, &tmpContext))) {
-
-            MH_Initialize();
-            void** vt = *(void***)tmpSwapChain;
-            ok = (MH_CreateHook(vt[8], (void*)HookPresent, (void**)&OriginalPresent) == MH_OK)
-              && (MH_EnableHook(vt[8]) == MH_OK);
-            DEBUG_LOG("DX11Hook::InstallHook: Present hook %s", ok ? "OK" : "FAILED");
-
-            tmpSwapChain->Release();
-            tmpContext->Release();
-            tmpDevice->Release();
-        } else {
-            DEBUG_LOG("DX11Hook::InstallHook: D3D11CreateDeviceAndSwapChain FAILED");
+        kiero::D3D11Output output;
+        auto err = kiero::locate<kiero::Implementation_D3D11>(nullptr, &output);
+        if (err != kiero::Error_Nil) {
+            DEBUG_LOG("DX11Hook::InstallHook: kiero locate failed (err=%d)", err);
+            return false;
         }
 
-        DestroyWindow(dummy);
-        UnregisterClassW(L"DX11HookDummy", wc.hInstance);
-        return ok;
+        if (output.swapchain_methods.size() <= 8 || !output.swapchain_methods[8]) {
+            DEBUG_LOG("DX11Hook::InstallHook: Present method not found in vtable");
+            return false;
+        }
+
+        auto presentAddr = output.swapchain_methods[8];
+        DEBUG_LOG("DX11Hook::InstallHook: Present found at %p", presentAddr);
+
+        MH_Initialize();
+        if (MH_CreateHook(presentAddr, (void*)HookPresent, (void**)&OriginalPresent) != MH_OK
+            || MH_EnableHook(presentAddr) != MH_OK) {
+            DEBUG_LOG("DX11Hook::InstallHook: MinHook failed");
+            return false;
+        }
+
+        DEBUG_LOG("DX11Hook::InstallHook: hook installed successfully");
+        return true;
     }
 }

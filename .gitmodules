@@ -1,3 +1,6 @@
 [submodule "StArray.ModManager.Windows/Native/minhook"]
 	path = StArray.ModManager.Windows/Native/minhook
 	url = https://github.com/TsudaKageyu/minhook
+[submodule "StArray.ModManager.Windows/Native/kiero2"]
+	path = StArray.ModManager.Windows/Native/kiero2
+	url = https://github.com/kirchesz/kiero2

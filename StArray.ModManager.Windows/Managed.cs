@@ -82,24 +82,51 @@ public static class Managed
         Writer.AutoFlush = true;
         Logger.Info($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
 
-        Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(new DirectoryInfo(modsPath).Parent.Parent.FullName,"GameAssembly.dll"));
-        // 检测运行时后端 + 图形设备类型
-        //RuntimeManager.Detect();
+        Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(AppContext.BaseDirectory,"..","..", "GameAssembly.dll"));
+        // 检测运行时后端 (IL2CPP / Mono)
+        RuntimeManager.Detect();
         Logger.Info("Runtime", $"Detected backend: {RuntimeManager.Backend}");
+
+        // 检测图形设备类型
+        var renderer = GetGameRenderer();
+        Logger.Info("Backend", $"Detected renderer: {renderer}");
 
         ModManagerUI modManagerUI = new(new ModLoader(modsPath), managedDir);
 
-        // Detect backend and pick renderer
-        var renderer = Renderer.D3D11;
-        Logger.Info("Backend", $"Detected renderer: {renderer}");
-
-        if ((renderer & Renderer.D3D11) != 0)
+        NativeApi.SetBackend(1); // D3D11
+        ImGuiDXRenderer.OnRender += modManagerUI.Render;
+        ImGuiDXRenderer.Install();
+        /*if ((renderer & Renderer.D3D11) != 0)
         {
             NativeApi.SetBackend(1); // D3D11
-            ImGuiDXRenderer.OnRender += modManagerUI.Render;
-            ImGuiDXRenderer.Install();
-            return 0;
+            ImGuiRenderer.OnRender += modManagerUI.Render;
+            ImGuiRenderer.Install();
         }
+        else if ((renderer & Renderer.D3D12) != 0)
+        {
+            NativeApi.SetBackend(0); // D3D12
+            ImGuiRenderer.OnRender += modManagerUI.Render;
+            ImGuiRenderer.Install();
+        }
+        else if ((renderer & Renderer.D3D9) != 0)
+        {
+            NativeApi.SetBackend(2); // D3D9
+            ImGuiRenderer.OnRender += modManagerUI.Render;
+            ImGuiRenderer.Install();
+        }
+        else if ((renderer & Renderer.Vulkan) != 0 ||
+                 (renderer & Renderer.OpenGL) != 0)
+        {
+            // GL/VK: native handles Win32 init only, C# handles ImGui backend
+            ImGuiRenderer.OnRender += modManagerUI.Render;
+            ImGuiRenderer.Install();
+        }
+        else
+        {
+            Logger.Error("Backend", "No supported renderer found");
+            return 1;
+        }*/
+
         totalSw.Stop();
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;
