@@ -29,6 +29,10 @@ inline char* GetDirectoryFile(char* filename) {
     return path;
 }
 
+inline bool IsIl2Cpp() {
+    return GetModuleHandle("GameAssembly.dll") != nullptr;
+}
+
 inline void Log(const char* fmt, ...) {
     if (!fmt) return;
     char text[4096];

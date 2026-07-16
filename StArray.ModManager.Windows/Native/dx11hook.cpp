@@ -3,6 +3,7 @@
 #include "cimgui.h"
 #include "kiero.hpp"
 #include "kiero_d3d11.hpp"
+#include <d3dcompiler.h>
 
 typedef HRESULT(APIENTRY* PresentFn)(IDXGISwapChain*, UINT, UINT);
 
@@ -12,6 +13,7 @@ namespace DX11Hook {
 
     static PresentFn OriginalPresent = nullptr;
     static bool Initialised = false;
+    static bool isIl2Cpp;
 
     LRESULT APIENTRY HookWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (ImGui_ImplWin32_WndProcHandler(h, m, w, l))
@@ -42,7 +44,10 @@ namespace DX11Hook {
     }
 
     ID3D11RenderTargetView *MainRTV = nullptr;
+    ID3D11Device*           CachedDevice = nullptr;
 
+
+    ID3D11RenderTargetView* gameRTV;
     HRESULT HookPresent(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags) {
         if (!Initialised) {
             DXGI_SWAP_CHAIN_DESC desc;
@@ -52,12 +57,14 @@ namespace DX11Hook {
             ID3D11Device* device = nullptr;
             swapChain->GetDevice(__uuidof(ID3D11Device), (void**)&device);
             device->GetImmediateContext(&DeviceContext);
+            CachedDevice = device;
             if (imgui_callbacks.init_callback) imgui_callbacks.init_callback();
 
             if (ImGui_ImplWin32_Init(g_GameWindow) && ImGui_ImplDX11_Init(device, DeviceContext)) {
                 SwapChain = swapChain;
                 g_OriginalWndProc = (WNDPROC)SetWindowLongPtrW(g_GameWindow,
                     GWLP_WNDPROC, (LONG_PTR)HookWndProc);
+                isIl2Cpp = IsIl2Cpp();
                 Initialised = true;
                 ImGui_Initialised = true;
                 DEBUG_LOG("DX11Hook: ImGui initialised, hwnd=%p", g_GameWindow);
@@ -65,25 +72,23 @@ namespace DX11Hook {
         }
 
         if (Initialised) {
-            /*if (MainRTV) { MainRTV->Release(); MainRTV = nullptr; }
-            ID3D11Texture2D* bb = nullptr;
-            swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&bb);
-            ID3D11Device* device = nullptr;
-            swapChain->GetDevice(__uuidof(ID3D11Device), (void**)&device);
-            if (bb) { device->CreateRenderTargetView(bb, nullptr, &MainRTV); bb->Release(); }
-            */
-
+            // Rebuild RTV each frame
+            if (isIl2Cpp) {
+                //TODO: impl resize
+                if (MainRTV) { MainRTV->Release(); MainRTV = nullptr; }
+                ID3D11Texture2D* bb = nullptr;
+                swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&bb);
+                if (bb) {
+                    CachedDevice->CreateRenderTargetView(bb,nullptr, &MainRTV);
+                    bb->Release();
+                }
+                DeviceContext->OMSetRenderTargets(1, &MainRTV, nullptr);
+            }
             ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
-            auto io = igGetIO();
-            DXGI_SWAP_CHAIN_DESC desc;
-            swapChain->GetDesc(&desc);
-            io->DisplaySize.x = desc.BufferDesc.Width;
-            io->DisplaySize.y = desc.BufferDesc.Height;
+
             if (imgui_callbacks.render_callback) imgui_callbacks.render_callback();
             ImGui_ImplDX11_RenderDrawData(igGetDrawData());
-
-            //if (MainRTV) DeviceContext->OMSetRenderTargets(1, &MainRTV, nullptr);
         }
 
         return OriginalPresent(swapChain, syncInterval, flags);
@@ -92,6 +97,10 @@ namespace DX11Hook {
     bool InstallHook() {
         DEBUG_LOG("DX11Hook::InstallHook: locating D3D11 methods via kiero...");
 
+        if (GetModuleHandle("d3d11.dll") == nullptr) {
+            DEBUG_LOG("DX11Hook::InstallHook: GetModuleHandle failed");
+            LoadLibrary("d3d11.dll");
+        }
         kiero::D3D11Output output;
         auto err = kiero::locate<kiero::Implementation_D3D11>(nullptr, &output);
         if (err != kiero::Error_Nil) {

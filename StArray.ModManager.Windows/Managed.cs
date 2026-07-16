@@ -88,8 +88,8 @@ public static class Managed
         Logger.Info("Runtime", $"Detected backend: {RuntimeManager.Backend}");
 
         // 检测图形设备类型
-        var renderer = GetGameRenderer();
-        Logger.Info("Backend", $"Detected renderer: {renderer}");
+        //var renderer = GetGameRenderer();
+        //Logger.Info("Backend", $"Detected renderer: {renderer}");
 
         ModManagerUI modManagerUI = new(new ModLoader(modsPath), managedDir);
 

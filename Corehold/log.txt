@@ -1,0 +1,7 @@
+[ModManager/Managed-Benchmark][Info]: Path resolve: 0.006s
+[ModManager/Runtime][Info]: Detected backend: Il2Cpp
+[ModManager/ModLoader][Info]: 共发现 0 个 Mod
+[ModManager/ImGuiDXRenderer][Info]: NativeInit=0
+[ModManager/ImGuiDXRenderer][Info]: Ready (multi-backend)
+[ModManager/Managed-Benchmark][Info]: === Startup total: 0.130s ===
+[ModManager/ImGuiDXRenderer][Info]: Init

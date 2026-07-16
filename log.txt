@@ -2,3 +2,67 @@
 [DEBUG] DX11Hook::InstallHook: Present hook OK
 [DEBUG] DX11Hook::InstallHook: creating dummy device...
 [DEBUG] DX11Hook::InstallHook: Present hook OK
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=00000000000608D8
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=000000000008069C
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=00000000003006E0
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=000000000073067E
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=0000000000140A08
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=000000000031084C
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=0000000000120A06
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=00000000000E0826
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=00000000000F0826
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=0000000000100794
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=0000000000050776
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=000000000011066A
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=00000000001006A2
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=000000000026043C
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFC600618C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=00000000005E0356
+[DEBUG] DX11Hook::InstallHook: locating D3D11 methods via kiero...
+[DEBUG] DX11Hook::InstallHook: Present found at 00007FFA862E18C0
+[DEBUG] DX11Hook::InstallHook: hook installed successfully
+[DEBUG] DX11Hook: ImGui initialised, hwnd=00000000000E0C06
