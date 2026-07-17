@@ -120,8 +120,38 @@ Final layout / 最终目录：
 
 ## 3. Write a Mod / 写 Mod (跨平台)
 
-Reference `StArray.ModManager.dll` → implement `IModPlugin` → build DLL → drop into `mods/{ModName}/`.  
-引用 `StArray.ModManager.dll` → 实现 `IModPlugin` → 编译 DLL → 放入 `mods/{ModName}/`。
+### 引用 DLL / Reference DLLs
+
+| DLL | 用途 | 必需 |
+|---|---|---|
+| `StArray.ModManager.dll` | ModManager 核心 API（`IModPlugin`, `IModSettings`, 运行时抽象, ImGui 等） | ✅ |
+| `StArray.ModManager.Windows.dll` | Windows 平台原生依赖（仅部署时，不引用） | ❌ |
+| `ImGui.NET.dll` | ImGui 绑定（`ImGuiNET` 命名空间） | 如需 UI |
+
+### .csproj 模板
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="StArray.ModManager">
+      <HintPath>path\to\StArray.ModManager.dll</HintPath>
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>path\to\ImGui.NET.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
+```
+
+### 最简单的 Mod
 
 ```csharp
 using StArray.ModManager.Runtime;
@@ -146,6 +176,78 @@ public class HelloMod : IModPlugin
         drawList.AddText(new Vector2(10, 10), 0xFFFFFFFF, $"FPS: {ImGui.GetIO().Framerate:F0}");
     }
 }
+```
+
+### 可设置项的 Mod
+
+实现 `IModSettings` 添加设置页：
+
+```csharp
+public class ConfigurableMod : IModPlugin, IModSettings
+{
+    public string Id => "com.example.configurable";
+
+    // ── 声明设置字段，自动显示在 ModManager 检查器 ──
+    [ModSettingLabel("Show HUD")]
+    [ModSettingLabelSide(ModInspector.LabelSide.Right)]  // 勾选框，标签在右侧
+    public bool ShowHud = true;
+
+    [ModSettingLabel("Scale")]
+    [ModSettingRange(0.5f, 3f)]
+    public float Scale = 1f;
+
+    public void OnGui() => ModInspector.Draw(this);
+}
+```
+
+### 使用 UnmanagedHook / UnmanagedStub
+
+参考 [LevelDebugger](LevelDebugger/)，分三步：
+
+1. **定义 Stub** — 用 `UnmanagedObject` 封装游戏类的字段/属性/方法调用
+2. **声明 Hook** — 用 `[UnmanagedHook(程序集, 类, 方法)]` 标记替换方法
+3. **注册设置** — 用 `[ModSettingLabel]` 特性声明可开关项
+
+```csharp
+// Stub — 封装游戏类字段/方法
+public sealed class ScrControllerStub(nint ptr) : UnmanagedObject(ptr)
+{
+    public int CurrentSeqID => Obj.GetField<int>("currentSeqID");
+    public nint PlayerOne => Obj.GetField<nint>("playerOne");
+}
+
+// Hook
+public class MyMod : IModPlugin
+{
+    [UnmanagedHook("Assembly-CSharp.dll", "scrController", "TogglePauseGame")]
+    static bool TogglePauseGame(nint thiz)
+    {
+        var ret = TogglePauseGameOriginal(thiz);
+        Logger.Warn("MyMod", "Game paused");
+        return ret;
+    }
+}
+```
+### Stub / Hook 详细文档
+
+参见：
+- [LevelDebugger 完整示例](LevelDebugger/) — 含 Stub 定义、Hook 声明、HUD 渲染、设置面板
+- [RuntimeObject API](StArray.ModManager/RuntimeAbstractions/RuntimeObject.cs) — 字段读写、方法调用、数组访问
+- [RuntimeArray API](StArray.ModManager/RuntimeAbstractions/RuntimeArray.cs) — 强类型数组元素读写
+- [ModInspector](StArray.ModManager/Inspector/) — 自动绘制设置面板
+- [UnmanagedObject](StArray.ModManager/RuntimeAbstractions/IUnmanagedObject.cs) — Stub 基类，提供 `Wrap<T>()` 安全包装
+
+### package / 发布
+
+Mod 部署到 `mods/{ModId}/` 目录，ModManager 自动识别：
+
+```
+GameFolder/
+└── Corehold/
+    └── mods/
+        └── {YourModId}/
+            ├── {YourModId}.dll
+            └── 依赖.dll          # 如有额外依赖
 ```
 
 ### Optional interfaces / 可选接口

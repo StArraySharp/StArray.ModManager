@@ -16,28 +16,25 @@ namespace StArray.ModManager.Hooks
         { Address = address; Convention = CallingConvention.StdCall; }
     }
 
+    /// <summary>
+    /// 标记一个方法为托管运行时（Mono / Il2Cpp）函数 Hook。
+    /// 3 参数构造函数 Namespace 默认为 ""（Il2Cpp 风格）；
+    /// 4 参数构造函数可指定 Namespace（Mono 风格）。
+    /// </summary>
     [AttributeUsage(AttributeTargets.Method)]
-    public sealed class Il2CppHookAttribute : Attribute
+    public sealed class UnmanagedHookAttribute : Attribute
     {
         public string AssemblyName { get; }
+        public string? Namespace { get; set; }
         public string ClassName { get; }
         public string MethodName { get; }
         public int ParameterCount { get; set; } = -1;
-        public string[] ParameterTypeNames { get; set; }
-        public Il2CppHookAttribute(string asm, string cls, string method)
-        { AssemblyName = asm; ClassName = cls; MethodName = method; }
-    }
+        public string[]? ParameterTypeNames { get; set; }
 
-    [AttributeUsage(AttributeTargets.Method)]
-    public sealed class MonoHookAttribute : Attribute
-    {
-        public string AssemblyName { get; }
-        public string Namespace { get; }
-        public string ClassName { get; }
-        public string MethodName { get; }
-        public int ParameterCount { get; set; } = -1;
-        public string[] ParameterTypeNames { get; set; }
-        public MonoHookAttribute(string asm, string ns, string cls, string method)
-        { AssemblyName = asm; Namespace = ns; ClassName = cls; MethodName = method; }
+        public UnmanagedHookAttribute(string assembly, string className, string methodName)
+        { AssemblyName = assembly; ClassName = className; MethodName = methodName; }
+
+        public UnmanagedHookAttribute(string assembly, string ns, string className, string methodName)
+        { AssemblyName = assembly; Namespace = ns; ClassName = className; MethodName = methodName; }
     }
 }

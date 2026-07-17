@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -78,6 +79,15 @@ public unsafe class MonoFunctions
         {
             fixed (MonoImageOpenStatus* ps = &status)
                 return (nint)Methods.mono_assembly_load_from((_MonoImage*)image, (sbyte*)p, ps);
+        }
+    }
+
+    public static nint MonoAssemblyLoadWithPartialName(string name, out MonoImageOpenStatus status)
+    {
+        fixed (byte* p = Encoding.UTF8.GetBytes(name + "\0"))
+        {
+            fixed (MonoImageOpenStatus* ps = &status)
+                return (nint)Methods.mono_assembly_load_with_partial_name((sbyte*)p, ps);
         }
     }
 
@@ -182,6 +192,9 @@ public unsafe class MonoFunctions
 
     public static bool MonoClassIsValuetype(nint klass)
         => Methods.mono_class_is_valuetype((_MonoClass*)klass) != 0;
+
+    public static uint MonoClassGetFlags(nint klass)
+        => Methods.mono_class_get_flags((_MonoClass*)klass);
 
     public static bool MonoClassIsEnum(nint klass)
         => Methods.mono_class_is_enum((_MonoClass*)klass) != 0;
@@ -443,6 +456,52 @@ public unsafe class MonoFunctions
     {
         fixed (byte* p = Encoding.UTF8.GetBytes(name + "\0"))
             Methods.mono_add_internal_call((sbyte*)p, (void*)method);
+    }
+
+    // ====================================================================
+    //  Assembly Load Hook
+    // ====================================================================
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void AssemblyLoadHookCallback(_MonoAssembly* assembly, void* userData)
+    {
+        var image = MonoAssemblyGetImage((nint)assembly);
+        var name = MonoImageGetName(image);
+        if (name != null)
+        {
+            MonoDomain.OnAssemblyLoad(name, (nint)assembly);
+            MonoDomain.FlushPending(name);
+        }
+    }
+
+    public static void InstallAssemblyLoadHook()
+    {
+        Methods.mono_install_assembly_load_hook(&AssemblyLoadHookCallback, null);
+    }
+
+    // ====================================================================
+    //  Assembly Enumeration
+    // ====================================================================
+
+    public static void MonoAssemblyForeach(Action<nint> callback)
+    {
+        var handle = GCHandle.Alloc(callback);
+        try
+        {
+            Methods.mono_assembly_foreach(&AssemblyForeachCallback, (void*)GCHandle.ToIntPtr(handle));
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void AssemblyForeachCallback(void* assembly, void* userData)
+    {
+        var handle = GCHandle.FromIntPtr((nint)userData);
+        if (handle.IsAllocated && handle.Target is Action<nint> callback)
+            callback((nint)assembly);
     }
 
     // ====================================================================

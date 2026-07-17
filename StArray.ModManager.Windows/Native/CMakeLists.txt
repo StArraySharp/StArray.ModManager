@@ -50,6 +50,7 @@ add_library(${PROJECT_NAME} SHARED
         dx9hook.cpp
         dx11hook.cpp
         dx12hook.cpp
+        minhook/dll_resources/MinHook.def
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")
 target_include_directories(${PROJECT_NAME} PRIVATE

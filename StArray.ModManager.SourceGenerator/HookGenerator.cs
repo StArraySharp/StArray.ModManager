@@ -9,14 +9,13 @@ namespace StArray.ModManager.SourceGenerator;
 
 /// <summary>
 /// 增量 Source Generator —— 为 <see cref="NativeHookAttribute"/> 和
-/// <see cref="Il2CppHookAttribute"/> 自动生成 Hook 安装/卸载/原函数调用基础设施。
+/// <see cref="UnmanagedHookAttribute"/> 自动生成 Hook 安装/卸载/原函数调用基础设施。
 /// </summary>
 [Generator]
 public class HookGenerator : IIncrementalGenerator
 {
     private const string NativeHookAttrName = "StArray.ModManager.Hooks.NativeHookAttribute";
-    private const string Il2CppHookAttrName = "StArray.ModManager.Hooks.Il2CppHookAttribute";
-    private const string MonoHookAttrName = "StArray.ModManager.Hooks.MonoHookAttribute";
+    private const string UnmanagedHookAttrName = "StArray.ModManager.Hooks.UnmanagedHookAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -43,6 +42,7 @@ public class HookGenerator : IIncrementalGenerator
         public ImmutableArray<(string Type, string Name)> Parameters { get; set; }
         public ImmutableArray<string> CtorArgs { get; set; }
         public ImmutableArray<(string Key, string Value)> NamedArgs { get; set; }
+        public bool HasUnmanagedCallersOnly { get; set; }
     }
 
     private static HookInfo? GetHookInfo(GeneratorSyntaxContext ctx)
@@ -58,8 +58,7 @@ public class HookGenerator : IIncrementalGenerator
             string? attrType = attrName switch
             {
                 NativeHookAttrName => "NativeHook",
-                Il2CppHookAttrName => "Il2CppHook",
-                MonoHookAttrName => "MonoHook",
+                UnmanagedHookAttrName => "UnmanagedHook",
                 _ => null,
             };
             if (attrType == null) continue;
@@ -75,6 +74,9 @@ public class HookGenerator : IIncrementalGenerator
             var na = ImmutableArray.CreateBuilder<(string, string)>();
             foreach (var n in attr.NamedArguments) na.Add((n.Key, FormatConstant(n.Value)));
 
+            var uco = sym.GetAttributes().Any(a =>
+                a.AttributeClass?.ToDisplayString() == "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute");
+
             return new HookInfo
             {
                 AttrType = attrType,
@@ -84,6 +86,7 @@ public class HookGenerator : IIncrementalGenerator
                 Parameters = pl.ToImmutable(),
                 CtorArgs = ca.ToImmutable(),
                 NamedArgs = na.ToImmutable(),
+                HasUnmanagedCallersOnly = uco,
             };
         }
         return null;
@@ -141,8 +144,9 @@ public class HookGenerator : IIncrementalGenerator
                 sb.AppendLine($"        private static nint _{sf}_origPtr;");
                 sb.AppendLine($"        private static _{sf}Delegate? _{sf}_orig;");
 
-                // ── 持久引用（防止 delegate 被 GC） ──
-                sb.AppendLine($"        private static _{sf}Delegate? _{sf}_wrap;");
+                // ── 持久引用（防止 delegate 被 GC；[UnmanagedCallersOnly] 不需要） ──
+                if (!h.HasUnmanagedCallersOnly)
+                    sb.AppendLine($"        private static _{sf}Delegate? _{sf}_wrap;");
 
                 // ── Install ──
                 sb.AppendLine();
@@ -161,18 +165,38 @@ public class HookGenerator : IIncrementalGenerator
                     }
                     sb.AppendLine($"            if (t == nint.Zero) return false;");
                     sb.AppendLine($"            _{sf}_origPtr = t;");
-                    sb.AppendLine($"            _{sf}_wrap = {h.MethodName};");
-                    sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
+                    if (h.HasUnmanagedCallersOnly)
+                        sb.AppendLine($"            var d = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!.MethodHandle.GetFunctionPointer();");
+                    else
+                    {
+                        sb.AppendLine($"            _{sf}_wrap = {h.MethodName};");
+                        sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
+                    }
                     sb.AppendLine($"            var o = global::StArray.ModManager.Runtime.HookHelper.Hook(t, d);");
                     sb.AppendLine($"            if (o == nint.Zero) return false;");
                     sb.AppendLine($"            _{sf}_orig = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(o);");
                     sb.AppendLine("            return true;");
                 }
-                else if (h.AttrType == "Il2CppHook")
+                else // UnmanagedHook
                 {
                     var a = h.CtorArgs.Length > 0 ? h.CtorArgs[0] : "\"\"";
-                    var c = h.CtorArgs.Length > 1 ? h.CtorArgs[1] : "\"\"";
-                    var m = h.CtorArgs.Length > 2 ? h.CtorArgs[2] : "\"\"";
+                    string clsNs;
+                    string c;
+                    string m;
+                    if (h.CtorArgs.Length == 4)
+                    {
+                        clsNs = h.CtorArgs[1];
+                        c = h.CtorArgs[2];
+                        m = h.CtorArgs[3];
+                    }
+                    else
+                    {
+                        clsNs = "\"\"";
+                        c = h.CtorArgs.Length > 1 ? h.CtorArgs[1] : "\"\"";
+                        m = h.CtorArgs.Length > 2 ? h.CtorArgs[2] : "\"\"";
+                    }
+                    foreach (var n in h.NamedArgs)
+                        if (n.Key is "Namespace" or "namespace") clsNs = n.Value;
                     string? ptn = null;
                     foreach (var n in h.NamedArgs)
                         if (n.Key is "ParameterTypeNames" or "parameterTypeNames") ptn = n.Value;
@@ -180,9 +204,11 @@ public class HookGenerator : IIncrementalGenerator
                     foreach (var n in h.NamedArgs)
                         if (n.Key is "ParameterCount" or "parameterCount") pc = n.Value;
 
-                    sb.AppendLine($"            var asm = global::StArray.ModManager.Il2Cpp.Il2CppAssembly.Get({a});");
+                    sb.AppendLine($"            var domain = global::StArray.ModManager.RuntimeAbstractions.RuntimeManager.GetDomain();");
+                    sb.AppendLine($"            if (domain == null) return false;");
+                    sb.AppendLine($"            var asm = domain.OpenAssembly({a});");
                     sb.AppendLine($"            if (asm == null) return false;");
-                    sb.AppendLine($"            var cls = asm.GetClass(\"\", {c});");
+                    sb.AppendLine($"            var cls = asm.GetClass({clsNs}, {c});");
                     sb.AppendLine($"            if (cls == null) return false;");
                     if (ptn != null)
                         sb.AppendLine($"            var method = cls.GetMethod({m}, {ptn});");
@@ -191,39 +217,13 @@ public class HookGenerator : IIncrementalGenerator
                     sb.AppendLine($"            if (method == null) return false;");
                     sb.AppendLine($"            var t = method.FunctionPtr;");
                     sb.AppendLine($"            _{sf}_origPtr = t;");
-                    sb.AppendLine($"            _{sf}_wrap = {h.MethodName};");
-                    sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
-                    sb.AppendLine($"            var o = global::StArray.ModManager.Runtime.HookHelper.Hook(t, d);");
-                    sb.AppendLine($"            if (o == nint.Zero) return false;");
-                    sb.AppendLine($"            _{sf}_orig = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(o);");
-                    sb.AppendLine("            return true;");
-                }
-                else // MonoHook
-                {
-                    var a = h.CtorArgs.Length > 0 ? h.CtorArgs[0] : "\"\"";
-                    var nsArg = h.CtorArgs.Length > 1 ? h.CtorArgs[1] : "\"\"";
-                    var c = h.CtorArgs.Length > 2 ? h.CtorArgs[2] : "\"\"";
-                    var m = h.CtorArgs.Length > 3 ? h.CtorArgs[3] : "\"\"";
-                    string? ptn = null;
-                    foreach (var n in h.NamedArgs)
-                        if (n.Key is "ParameterTypeNames" or "parameterTypeNames") ptn = n.Value;
-                    string pc = "-1";
-                    foreach (var n in h.NamedArgs)
-                        if (n.Key is "ParameterCount" or "parameterCount") pc = n.Value;
-
-                    sb.AppendLine($"            var asm = global::StArray.ModManager.Mono.MonoAssembly.Get({a});");
-                    sb.AppendLine($"            if (asm == null) return false;");
-                    sb.AppendLine($"            var cls = asm.GetClass({nsArg}, {c});");
-                    sb.AppendLine($"            if (cls == null) return false;");
-                    if (ptn != null)
-                        sb.AppendLine($"            var method = cls.GetMethod({m}, {ptn});");
+                    if (h.HasUnmanagedCallersOnly)
+                        sb.AppendLine($"            var d = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!.MethodHandle.GetFunctionPointer();");
                     else
-                        sb.AppendLine($"            var method = cls.GetMethod({m}, {pc});");
-                    sb.AppendLine($"            if (method == null) return false;");
-                    sb.AppendLine($"            var t = method.FunctionPtr;");
-                    sb.AppendLine($"            _{sf}_origPtr = t;");
-                    sb.AppendLine($"            _{sf}_wrap = {h.MethodName};");
-                    sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
+                    {
+                        sb.AppendLine($"            _{sf}_wrap = {h.MethodName};");
+                        sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
+                    }
                     sb.AppendLine($"            var o = global::StArray.ModManager.Runtime.HookHelper.Hook(t, d);");
                     sb.AppendLine($"            if (o == nint.Zero) return false;");
                     sb.AppendLine($"            _{sf}_orig = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(o);");
@@ -261,7 +261,8 @@ public class HookGenerator : IIncrementalGenerator
                 sb.AppendLine($"                global::StArray.ModManager.Runtime.HookHelper.Unhook(_{sf}_origPtr);");
                 sb.AppendLine($"                _{sf}_origPtr = nint.Zero;");
                 sb.AppendLine($"                _{sf}_orig = null;");
-                sb.AppendLine($"                _{sf}_wrap = null;");
+                if (!h.HasUnmanagedCallersOnly)
+                    sb.AppendLine($"                _{sf}_wrap = null;");
                 sb.AppendLine($"            }}");
             }
             sb.AppendLine("        }");

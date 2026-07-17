@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using StArray.ModManager.Resources;
 using System.Numerics;
 using System.Reflection;
@@ -15,7 +16,7 @@ namespace StArray.ModManager.Manager;
 public partial class ModManagerUI
 {
     private readonly ModLoader _modManager;
-    private readonly List<string> _logMessages = new();
+    private readonly ConcurrentQueue<string> _logMessages = new();
     private ModEntry? _selectedMod;
     private ModManagerConfig _config = new();
     private readonly string _configDir;
@@ -107,10 +108,8 @@ public partial class ModManagerUI
             Logger.Level.Debug => "[DEBUG]",
             _                  => "[INFO]"
         };
-        _logMessages.Add($"[{DateTime.Now:HH:mm:ss}] {prefix}[{tag}] {msg}");
-
-        while (_logMessages.Count > 500)
-            _logMessages.RemoveAt(0);
+        _logMessages.Enqueue($"[{DateTime.Now:HH:mm:ss}] {prefix}[{tag}] {msg}");
+        if (_logMessages.Count > 500 && _logMessages.TryDequeue(out _)) { }
     }
 
     /// <summary>
@@ -237,23 +236,35 @@ public partial class ModManagerUI
                 {
                     if (ImGui.BeginTabBar("ConsoleTabs"))
                     {
-                        if (ImGui.BeginTabItem(L10n.Get("Tab_Log")))
+                            if (ImGui.BeginTabItem(L10n.Get("Tab_Log")))
                         {
-                            if (ImGui.Button(FontAwesome7.Trash + " " + L10n.Get("Btn_Clear"))) _logMessages.Clear();
+                            var logSnapshot = _logMessages.ToArray();
+                            if (ImGui.Button(FontAwesome7.Trash + " " + L10n.Get("Btn_Clear"))) { while (_logMessages.TryDequeue(out _)) { } }
                             ImGui.SameLine();
-                            ImGui.Text(L10n.Get("Status_LogCount", _logMessages.Count));
+                            ImGui.Text(L10n.Get("Status_LogCount", logSnapshot.Length));
                             ImGui.Separator();
 
                             if (ImGui.BeginChild("LogScroll", Vector2.Zero, ImGuiChildFlags.None,
-                                ImGuiWindowFlags.HorizontalScrollbar))
+                                ImGuiWindowFlags.HorizontalScrollbar | ImGuiWindowFlags.AlwaysVerticalScrollbar))
                             {
-                                foreach (var msg in _logMessages.AsEnumerable().Reverse())
+                                try
                                 {
-                                    var color = msg.Contains("[ERROR]")
-                                        ? new Vector4(1f, 0.3f, 0.3f, 1f)
-                                        : new Vector4(0.7f, 0.7f, 0.7f, 1f);
-                                    ImGui.TextColored(color, msg);
+                                    var atBottom = logSnapshot.Length == 0 ||
+                                        ImGui.GetScrollY() >= ImGui.GetScrollMaxY() - 4f;
+                                    var normalColor = new Vector4(0.7f, 0.7f, 0.7f, 1f);
+                                    var errorColor = new Vector4(1f, 0.3f, 0.3f, 1f);
+                                    foreach (var msg in logSnapshot)
+                                    {
+                                        var isError = msg.Contains("[ERROR]");
+                                        if (isError) ImGui.PushStyleColor(ImGuiCol.Text, errorColor);
+                                        else ImGui.PushStyleColor(ImGuiCol.Text, normalColor);
+                                        ImGui.TextUnformatted(msg);
+                                        ImGui.PopStyleColor();
+                                    }
+                                    if (atBottom)
+                                        ImGui.SetScrollHereY(1f);
                                 }
+                                catch { /* swallow render errors */ }
                             }
                             ImGui.EndChild();
                             ImGui.EndTabItem();

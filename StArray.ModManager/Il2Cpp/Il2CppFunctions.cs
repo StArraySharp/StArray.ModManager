@@ -235,7 +235,7 @@ public unsafe class Il2CppFunctions
     public static extern IntPtr il2cpp_domain_get();
 
     [DllImport("IL2CPP_LIBRARY_NAME", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-    public static extern IntPtr il2cpp_domain_assembly_open(IntPtr domain, IntPtr name);
+    public static extern IntPtr il2cpp_domain_assembly_open(IntPtr domain, string name);
 
     [DllImport("IL2CPP_LIBRARY_NAME", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern IntPtr* il2cpp_domain_get_assemblies(IntPtr domain, ref uint size);

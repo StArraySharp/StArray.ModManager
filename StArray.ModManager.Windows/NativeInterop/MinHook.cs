@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
 
 namespace StArray.ModManager.Windows.Native;
@@ -10,7 +11,18 @@ public class MinHook : IHook
     private enum Status : int
     {
         Ok = 0,
-        Error = -1,
+        ErrorAlreadyInitialized = 1,
+        ErrorNotInitialized = 2,
+        ErrorAlreadyCreated = 3,
+        ErrorNotCreated = 4,
+        ErrorEnabled = 5,
+        ErrorDisabled = 6,
+        ErrorNotExecutable = 7,
+        ErrorUnsupportedFunction = 8,
+        ErrorMemoryAlloc = 9,
+        ErrorMemoryProtect = 10,
+        ErrorModuleNotFound = 11,
+        ErrorFunctionNotFound = 12,
     }
 
     [DllImport(Lib, EntryPoint = "MH_Initialize")]
@@ -32,20 +44,28 @@ public class MinHook : IHook
     private static extern Status _RemoveHook(nint target);
 
     private bool _initialized;
+    private readonly Dictionary<nint, nint> _hooks = new();
 
     private void EnsureInit()
     {
         if (_initialized)
             return;
-        _Initialize();
+        var s = _Initialize();
+        Logger.Info("MinHook", $"MH_Initialize: {s} ({(int)s})");
         _initialized = true;
     }
 
     public nint Hook(nint target, nint detour)
     {
         EnsureInit();
-        if (_CreateHook(target, detour, out var original) != Status.Ok)
+        if (_hooks.TryGetValue(target, out var existing))
+            return existing;
+
+        var s = _CreateHook(target, detour, out var original);
+        Logger.Info("MinHook", $"MH_CreateHook(target=0x{target:X}, detour=0x{detour:X}): {s} ({(int)s}), original=0x{original:X}");
+        if (s != Status.Ok)
             return nint.Zero;
+        _hooks[target] = original;
         _EnableHook(target);
         return original;
     }
@@ -54,6 +74,7 @@ public class MinHook : IHook
     {
         var ok = _DisableHook(target) == Status.Ok;
         ok &= _RemoveHook(target) == Status.Ok;
+        _hooks.Remove(target);
         return ok;
     }
 

@@ -16,7 +16,7 @@ public unsafe class Il2CppAssembly : IRuntimeAssembly
     public Il2CppClass? GetClass(string namespaze, string name)
     {
         var img = Il2CppFunctions.il2cpp_assembly_get_image(Ptr);
-        var k = Il2CppFunctions.il2cpp_class_from_name(img, namespaze, name);
+        var k = Il2CppFunctions.il2cpp_class_from_name(img, namespaze, name.Replace('+', '/'));
         return k != 0 ? new Il2CppClass(k) : null;
     }
 
@@ -25,11 +25,7 @@ public unsafe class Il2CppAssembly : IRuntimeAssembly
 
     public static Il2CppAssembly? Get(string name)
     {
-        var domain = Il2CppFunctions.il2cpp_domain_get();
-        if (domain == 0) return null;
-        var nameObj = Il2CppFunctions.il2cpp_string_new(name);
-        var asm = Il2CppFunctions.il2cpp_domain_assembly_open(domain, nameObj);
-        return asm != 0 ? new Il2CppAssembly(asm) : null;
+        return (Il2CppAssembly?)Il2CppDomain.Current?.OpenAssembly(name);
     }
 }
 
@@ -108,8 +104,8 @@ public unsafe class Il2CppClass : IRuntimeClass
         return Il2CppFunctions.il2cpp_type_get_object(t);
     }
 
-    public Il2CppObject New() =>
-        new(Il2CppFunctions.il2cpp_object_new(Ptr));
+    public nint New() =>
+        Il2CppFunctions.il2cpp_object_new(Ptr);
 
     public bool IsGeneric => Il2CppFunctions.il2cpp_class_is_generic(Ptr);
     public bool IsInflated => Il2CppFunctions.il2cpp_class_is_inflated(Ptr);
@@ -160,7 +156,7 @@ public unsafe class Il2CppMethod : IRuntimeMethod
         }
     }
 
-    public nint FunctionPtr => Ptr;
+    public nint FunctionPtr => *(nint*)Ptr;
 
     public unsafe nint Invoke(nint obj, nint[]? args = null)
     {

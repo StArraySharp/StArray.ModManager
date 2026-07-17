@@ -179,7 +179,7 @@ public class ModLoader
         {
             mod.LoadState = ModLoadState.Error;
             mod.LoadError = ex.Message;
-            Logger.Error(nameof(ModLoader), $"{mod.Name} 加载失败: {ex.Message}");
+            Logger.Error(nameof(ModLoader), $"{mod.Name} 加载失败: {ex}");
         }
 
         OnModStateChanged?.Invoke(mod);

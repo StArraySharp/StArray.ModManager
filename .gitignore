@@ -68,3 +68,7 @@ tests
 Android/library/src/main/cpp/CMakeFiles/
 
 *.i
+cmake-build-*/
+LevelDebugger
+.run
+.vscode

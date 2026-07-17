@@ -22,7 +22,7 @@ public unsafe class MonoAssembly : IRuntimeAssembly
     {
         var img = MonoFunctions.MonoAssemblyGetImage(Ptr);
         if (img == 0) return null;
-        return MonoClass.FromName(img, namespaze, name);
+        return MonoClass.FromName(img, namespaze, name.Replace('+', '/'));
     }
 
     IRuntimeClass? IRuntimeAssembly.GetClass(string namespaze, string name)
@@ -133,6 +133,12 @@ public unsafe class MonoClass : IRuntimeClass
 
     internal static MonoMethod? FromMethodPtr(nint m)
         => m != 0 ? new MonoMethod(m) : null;
+
+    public nint New()
+    {
+        var domain = MonoFunctions.MonoGetRootDomain();
+        return domain != 0 ? MonoFunctions.MonoObjectNew(domain, Ptr) : 0;
+    }
 }
 
 public unsafe class MonoMethod : IRuntimeMethod

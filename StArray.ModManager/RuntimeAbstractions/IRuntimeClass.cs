@@ -10,4 +10,5 @@ public interface IRuntimeClass
     IRuntimeMethod? GetMethod(string name, int paramCount);
     IRuntimeMethod? GetMethod(string name, params string[] paramTypes);
     IRuntimeField? GetField(string name);
+    nint New();
 }

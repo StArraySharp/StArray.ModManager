@@ -31,7 +31,7 @@
   </ItemGroup>
 
   <Target Name="BuildNativeDll" BeforeTargets="BeforeBuild" Condition="'$(BuildNativeDll)' != 'false'">
-    <Exec Command="cmake -B &quot;$(ProjectDir)Native\build&quot; -G &quot;Unix Makefiles&quot; -DCMAKE_BUILD_TYPE=$(Configuration)"
+    <Exec Command="cmake -B &quot;$(ProjectDir)Native\build&quot; -G &quot;Ninja&quot; -DCMAKE_BUILD_TYPE=$(Configuration)"
           WorkingDirectory="$(ProjectDir)Native" />
     <Exec Command="cmake --build &quot;$(ProjectDir)Native\build&quot;"
           WorkingDirectory="$(ProjectDir)Native" />
