@@ -6,6 +6,7 @@ using System.Text.Json;
 using IconFonts;
 using ImGuiNET;
 using StArray.ModManager.Inspector;
+using StArray.ModManager.Mono;
 using StArray.ModManager.Resources;
 using StArray.ModManager.Runtime;
 using StArray.ModManager.Behaviours;
@@ -30,6 +31,8 @@ public partial class ModManagerUI
 
     private bool _configApplied;
     private float _lastFrameTime;
+    private bool _autoEnabled;
+    private bool _visible = true;
 
     /// <summary>初始化 UI，加载配置并扫描 Mod</summary>
     public ModManagerUI(ModLoader modManager, string configDir)
@@ -42,7 +45,6 @@ public partial class ModManagerUI
         if (string.IsNullOrEmpty(_config.ModsDirectory))
             _config.ModsDirectory = _modManager.ModsDirectory;
         _modManager.ScanMods();
-        AutoEnableMods();
     }
 
     private void ApplyConfig()
@@ -117,18 +119,40 @@ public partial class ModManagerUI
     /// </summary>
     public void Render()
     {
+        // F10 切换管理器隐藏/显示
+        if (ImGui.IsKeyPressed(ImGuiKey.F10))
+            _visible = !_visible;
+
+        // BehaviourManager: 处理增删 + OnStart/OnUpdate（始终运行）
+        var now = (float)ImGui.GetTime();
+        var delta = _lastFrameTime > 0 ? now - _lastFrameTime : 1f / 60f;
+        _lastFrameTime = now;
+        BehaviourManager.ProcessPending();
+        BehaviourManager.Update(delta);
+
+        if (!_visible)
+        {
+            // 前景层：Mod 的 HUD 仍需绘制
+            var fgList = ImGui.GetForegroundDrawList();
+            foreach (var mod in _modManager.Mods)
+            {
+                if (mod is { LoadState: ModLoadState.Loaded, PluginInstance: not null })
+                    mod.PluginInstance.OnForegroundGUI(fgList);
+            }
+            return;
+        }
+
         if (!_configApplied)
         {
             ApplyConfig();
             _configApplied = true;
         }
 
-        // ── BehaviourManager: 处理增删 + OnStart/OnUpdate（窗口绘制之前） ──
-        var now = (float)ImGui.GetTime();
-        var delta = _lastFrameTime > 0 ? now - _lastFrameTime : 1f / 60f;
-        _lastFrameTime = now;
-        BehaviourManager.ProcessPending();
-        BehaviourManager.Update(delta);
+        if (!_autoEnabled)
+        {
+            _autoEnabled = true;
+            AutoEnableMods();
+        }
 
         // 背景层：每个 Mod 在 ImGui 窗口下方绘制
         var bgDrawList = ImGui.GetBackgroundDrawList();

@@ -30,6 +30,7 @@ namespace StArray.ModManager.Hooks
         public string MethodName { get; }
         public int ParameterCount { get; set; } = -1;
         public string[]? ParameterTypeNames { get; set; }
+        public CallingConvention Convention { get; set; } = CallingConvention.Cdecl;
 
         public UnmanagedHookAttribute(string assembly, string className, string methodName)
         { AssemblyName = assembly; ClassName = className; MethodName = methodName; }

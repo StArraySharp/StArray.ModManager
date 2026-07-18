@@ -95,7 +95,13 @@ public class HookGenerator : IIncrementalGenerator
     private static string FormatConstant(TypedConstant tc)
     {
         if (tc.Kind == TypedConstantKind.Enum)
-            return $"{tc.Type!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{tc.Value}";
+        {
+            var intVal = tc.Value;
+            foreach (var m in tc.Type!.GetMembers())
+                if (m is IFieldSymbol fs && fs.ConstantValue != null && fs.HasConstantValue && fs.ConstantValue.Equals(intVal))
+                    return $"{tc.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{fs.Name}";
+            return $"{tc.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{tc.Value}";
+        }
         if (tc.Kind == TypedConstantKind.Array)
         {
             var items = tc.Values.Select(FormatConstant);

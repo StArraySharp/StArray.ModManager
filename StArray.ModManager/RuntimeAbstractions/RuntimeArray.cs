@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Mono;
 
@@ -17,7 +18,13 @@ public readonly unsafe struct RuntimeArray
         get
         {
             if (RuntimeManager.IsIl2Cpp) return (int)Il2CppFunctions.il2cpp_array_length(Ptr);
-            if (RuntimeManager.IsMono) return (int)MonoFunctions.MonoArrayLength(Ptr);
+            if (RuntimeManager.IsMono)
+            {
+                MonoDomain.Current.ThreadAttach();
+                var res = (int)MonoFunctions.MonoArrayLength(Ptr);
+                MonoDomain.Current.ThreadDetach();
+                return res;
+            }
             return 0;
         }
     }
@@ -98,8 +105,8 @@ public readonly unsafe struct RuntimeArray<T> where T : unmanaged
     {
         get
         {
-            if (RuntimeManager.IsIl2Cpp) return Il2CppFunctions.il2cpp_object_unbox(Ptr);
-            if (RuntimeManager.IsMono) return MonoFunctions.MonoObjectUnbox(Ptr);
+            if (RuntimeManager.IsIl2Cpp) return Il2CppFunctions.il2cpp_object_unbox(Ptr) + nint.Size * 2;
+            if (RuntimeManager.IsMono) return Ptr + nint.Size;
             return 0;
         }
     }
@@ -109,6 +116,8 @@ public readonly unsafe struct RuntimeArray<T> where T : unmanaged
         get
         {
             if (index < 0 || index >= Length) return default;
+            if (RuntimeManager.IsMono)
+                return *(T*)MonoFunctions.MonoArrayAddrWithSize(Ptr, sizeof(T), (nuint)index);
             return *(T*)(DataPtr + index * sizeof(T));
         }
     }

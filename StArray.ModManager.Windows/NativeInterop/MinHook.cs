@@ -58,10 +58,34 @@ public class MinHook : IHook
     public nint Hook(nint target, nint detour)
     {
         EnsureInit();
+        if (target == 0)
+        {
+            Logger.Warn("MinHook", "Hook target is 0, skipping");
+            return nint.Zero;
+        }
         if (_hooks.TryGetValue(target, out var existing))
             return existing;
 
-        var s = _CreateHook(target, detour, out var original);
+        // 确保目标内存可读可写
+        Win32Native.VirtualProtect(target, (UIntPtr)32, 0x40 /* PAGE_EXECUTE_READWRITE */, out _);
+
+        Status s;
+        nint original;
+        try
+        {
+            s = _CreateHook(target, detour, out original);
+        }
+        catch (AccessViolationException ex)
+        {
+            Logger.Error("MinHook", $"MH_CreateHook access violation at target=0x{target:X}: {ex.Message}");
+            return nint.Zero;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("MinHook", $"MH_CreateHook failed at target=0x{target:X}: {ex.GetType().Name}: {ex.Message}");
+            return nint.Zero;
+        }
+
         Logger.Info("MinHook", $"MH_CreateHook(target=0x{target:X}, detour=0x{detour:X}): {s} ({(int)s}), original=0x{original:X}");
         if (s != Status.Ok)
             return nint.Zero;

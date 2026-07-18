@@ -84,8 +84,8 @@ public static class Managed
 
         Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(AppContext.BaseDirectory,"..","..", "GameAssembly.dll"));
         // 检测运行时后端 (IL2CPP / Mono)
-        RuntimeManager.Detect();
-        Logger.Info("Runtime", $"Detected backend: {RuntimeManager.Backend}");
+        var backend = RuntimeManager.Detect();
+        Logger.Info("Runtime", $"Detected backend: {backend}");
 
         // 检测图形设备类型
         //var renderer = GetGameRenderer();

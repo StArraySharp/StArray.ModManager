@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using StArray.ModManager.Android.Native;
 using StArray.ModManager.Android.UI;
+using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
 
@@ -57,6 +58,7 @@ public static class Managed
         AssemblyPath = Path.Combine(Path.GetDirectoryName(modsPath), "manager", typeof(Managed).Namespace + ".dll");
         if (!Directory.Exists(modsPath))
             Directory.CreateDirectory(modsPath);
+        Il2CppFunctions.SetIl2CppLibraryPath("libil2cpp.so");
 
         // 文件日志 → manager 根目录（与 mods/、runtime/ 同级）
         var rootDir = Path.GetDirectoryName(modsPath)!;

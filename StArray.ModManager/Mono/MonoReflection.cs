@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using StArray.ModManager.Manager;
 using StArray.ModManager.RuntimeAbstractions;
 
 namespace StArray.ModManager.Mono;
@@ -20,9 +21,12 @@ public unsafe class MonoAssembly : IRuntimeAssembly
 
     public MonoClass? GetClass(string namespaze, string name)
     {
+        MonoDomain.Current.ThreadAttach();
         var img = MonoFunctions.MonoAssemblyGetImage(Ptr);
         if (img == 0) return null;
-        return MonoClass.FromName(img, namespaze, name.Replace('+', '/'));
+        var result = MonoClass.FromName(img, namespaze, name.Replace('+', '/'));
+        MonoDomain.Current.ThreadDetach();
+        return result;
     }
 
     IRuntimeClass? IRuntimeAssembly.GetClass(string namespaze, string name)
@@ -199,9 +203,7 @@ public unsafe class MonoMethod : IRuntimeMethod
     {
         nint ret = Invoke(obj, args);
         if (ret == 0) return default;
-        nint unboxed = MonoFunctions.MonoObjectUnbox(ret);
-        if (unboxed == 0) return default;
-        return *(T*)unboxed;
+        return *(T*)MonoFunctions.MonoObjectUnbox(ret);
     }
 
     /// <summary>静态调用并拆箱</summary>

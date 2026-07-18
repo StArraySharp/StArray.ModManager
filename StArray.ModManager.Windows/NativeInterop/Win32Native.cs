@@ -21,6 +21,9 @@ public static class Win32Native
     [DllImport("kernel32.dll")]
     public static extern nint GetStdHandle(int nStdHandle);
 
+    [DllImport("kernel32.dll")]
+    public static extern bool VirtualProtect(nint lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
+
     // ── user32.dll ────────────────────────────────────────────
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

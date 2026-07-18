@@ -13,25 +13,61 @@ Android IL2CPP Unity mod manager with CoreCLR runtime embedding and ImGui overla
 ## Project Structure
 
 ```
-StArray.ModManager/              C# mod manager (.NET 10)
-  Managed.cs                     CoreCLR entry – Logger桥接 → 扫描Mod → 启动ImGui
-  Il2Cpp/                        IL2CPP 内部类型 C# 翻译
-    Core.cs / Types.cs           Vector2/3/4, Quaternion, Il2CppString, Il2CppArray<T> 等
-    Reflection.cs                Il2CppAssembly, Il2CppClass, Il2CppMethod, Il2CppField
-    Unity.cs                     UnityObject, Component, Transform, GameObject, Camera
-    Coroutine.cs
-  Inspector/                     ImGui 自动检查器 + 设置特性（[ModSettingRange] 等）
+StArray.ModManager/              C# core library (.NET 10)
+  Behaviours/                    游戏生命周期行为
+    BehaviourManager.cs          行为调度器
+    GameBehaviour.cs             行为基类
+  Il2Cpp/                        IL2CPP 运行时反射实现
+    Domain.cs                    IL2CPP 域
+    Il2CppFunctions.cs           IL2CPP 原生函数导入
+    Il2CppReflection.cs          Assembly/Class/Method/Field 反射
+  Inspector/                     ImGui 自动检查器 + 设置特性
+    ModInspector.cs              检查器入口
+    ModInspector.Build.cs        配置面板构建
+    ModInspector.Draw.cs         字段绘制
+    ModSettingAttributes.cs      设置特性（[ModSettingLabel], [ModSettingRange] 等）
   Manager/                       核心逻辑
-    ModLoader.cs                 Mod 扫描/加载/卸载/状态管理
-    ModManagerUI.cs              ImGui 主面板 + 设置窗口 + Overlay 背景/前景渲染
-    ModManagerConfig.cs          全局配置 JSON 持久化（STJ 源生成）
-    Logger.cs                    统一日志 → logcat + 文件双写
     Benchmark.cs                 栈式嵌套计时
-  Native/                        原生绑定（Dobby, DL, JNI, AndroidUtils, UnityResolve）
-  Runtime/                       Mod 接口
-    IModPlugin.cs                OnLoad/OnUnload/OnBackgroundGUI/OnForegroundGUI
-    IModSettings.cs / IModSettingCustomDraw.cs
-  UI/                            ImGui EGL/Vulkan 渲染器 + 输入处理 + FA7 图标
+    Logger.cs                    统一日志
+    ModEntry.cs                  Mod 条目数据模型
+    ModManagerConfig.cs          全局配置 JSON 持久化（STJ 源生成）
+    ModManagerJsonContext.cs      STJ 序列化上下文
+    ModManagerUI.cs              ImGui 主面板 + 设置窗口
+    ModManagerUI.Panels.cs       面板子模块
+  Mono/                          Mono 运行时反射实现
+    Mono.cs                      Mono 域
+    MonoDomain.cs                Mono 域操作（Assembly 队列、Flush 等）
+    MonoFunctions.cs             Mono 原生函数导入
+    MonoReflection.cs            Assembly/Class/Method/Field 反射
+  Resources/                     嵌入资源
+    fa-solid-900.ttf             FontAwesome 7 图标字体
+    msyh.ttf                     微软雅黑字体
+    L10n.cs / Localization.*     本地化字符串
+  Runtime/                       Mod 框架接口
+    HookAttributes.cs            [UnmanagedHook] 特性
+    HookHelper.cs                Hook 注册工具
+    IHook.cs                     Hook 抽象
+    IModPlugin.cs                Mod 入口（OnLoad/OnUnload/OnBackgroundGUI/OnForegroundGUI）
+    IModSettings.cs / IModSettingCustomDraw.cs  设置接口
+    ModLoader.cs                 Mod 扫描/加载/卸载/状态管理
+  RuntimeAbstractions/           运行时抽象层（屏蔽 IL2CPP/Mono 差异）
+    IAppDomain.cs                域抽象
+    IRuntimeAssembly.cs          程序集抽象
+    IRuntimeClass.cs             类抽象
+    IRuntimeField.cs / IRuntimeMethod.cs  字段/方法抽象
+    IUnmanagedObject.cs          UnmanagedObject 基类 + Wrap<T>()
+    RuntimeArray.cs              强类型数组访问
+    RuntimeBox.cs                装箱/拆箱
+    RuntimeManager.cs            运行时选择（IL2CPP vs Mono）
+    RuntimeObject.cs             对象字段/方法/属性通用操作
+    RuntimeString.cs             string 读写
+    UnmanagedMemberAttribute.cs  字段/方法声明特性
+    GraphicsDevice.cs            GPU 设备抽象
+  TestStubs/                     测试 Stub
+    Transform.cs                 Unity Transform 测试 Stub
+  UI/                            ImGui 工具
+    FontAwesome7.cs              FA7 图标常量
+    IImGuiRenderer.cs            渲染器接口
 
 Android/library/                 原生库 (libmodmanager.so)
   src/main/cpp/core/             Dobby hook / CoreCLR 嵌入 / JNI helper / UnityResolve
@@ -55,6 +91,71 @@ Android/library/                 原生库 (libmodmanager.so)
 - **FontAwesome 7** icon support via embedded resource
 - **IImGuiRenderer** interface — swap between EGL, Vulkan backends
 - **CoreCLR args** — pass `string[]` from Java to managed `Entry(int, IntPtr)`
+
+## API Reference
+
+### Mod Entry Point
+
+| Interface | Method | Description |
+|-----------|--------|-------------|
+| `IModPlugin` | `OnLoad()` | Called when mod is loaded |
+| | `OnUnload()` | Called when mod is unloaded |
+| | `OnBackgroundGUI(ImDrawListPtr)` | Draw behind ImGui windows (watermark) |
+| | `OnForegroundGUI(ImDrawListPtr)` | Draw above ImGui windows (HUD) |
+| `IModSettings` | `OnGui()` | Draw custom settings tab in ModManager |
+
+### Hooks
+
+| Attribute | Target | Description |
+|-----------|--------|-------------|
+| `[UnmanagedHook("dll", "class", "method")]` | `static bool/nvoid Method(nint thiz, ...)` | Hooks a game method, replaces it with your implementation. Define `MethodOriginal` for calling the original. |
+
+### Stubs (Typed Game Object Wrappers)
+
+| Base Class | Description |
+|------------|-------------|
+| `UnmanagedObject` | Wraps `nint` pointer, provides `Obj` field for runtime access. Subclass to type-safe game object access. |
+| `Wrap<T>(nint ptr)` | Returns a typed stub wrapping the given pointer. |
+
+### Runtime Reflection
+
+| Class | Key Methods | Description |
+|-------|-------------|-------------|
+| `RuntimeObject` | `GetField<T>(string)` / `SetField(string, T)` | Read/write instance fields |
+| | `Invoke<T>(string, params object[])` | Call instance methods |
+| | `GetProperty<T>(string)` / `SetProperty(string, T)` | Read/write properties |
+| `RuntimeArray<T>` | `new RuntimeArray<T>(nint ptr)` | Strongly-typed array wrapper |
+| | `.Length` / `[index]` | Array length and element access |
+| | `.DataPtr` | Direct pointer to array elements |
+| `RuntimeManager` | `GetDomain()` / `IsIl2Cpp` | Detect current runtime and get domain |
+| `IAppDomain` | `OpenAssembly(string)` | Open a loaded assembly |
+| `IRuntimeAssembly` | `GetClass(string ns, string name)` | Get a class by namespace + name |
+| `IRuntimeClass` | `GetMethod(string, int)` / `GetField(string)` | Get method/field for invocation |
+| `IRuntimeMethod` | `Invoke(nint thisPtr, params object[])` / `InvokeStatic()` | Call a method |
+| `IRuntimeField` | `GetValue<T>(nint)` / `SetValue(nint, T)` | Read/write a field |
+
+### Settings Attributes
+
+| Attribute | Parameters | Description |
+|-----------|------------|-------------|
+| `[ModSettingLabel("text")]` | `string` | Display label for a setting field |
+| `[ModSettingLabelSide(ModInspector.LabelSide)]` | `Left` / `Right` | Label position |
+| `[ModSettingRange(min, max)]` | `float, float` | Clamp numeric values to range |
+| `[ModSettingJson(Lines = N)]` | `int` | Multi-line JSON editor |
+
+### Inspector
+
+| Method | Description |
+|--------|-------------|
+| `ModInspector.Draw(object)` | Auto-generate UI for all `[ModSettingLabel]` fields on the given object |
+
+### Utilities
+
+| Class | Description |
+|-------|-------------|
+| `Logger` | `Info(string)`, `Warn(string)`, `Error(string)` — unified logging |
+| `HookHelper` | `Instance` — set to your hook implementation (`MinHook` etc.) |
+| `BehaviourManager` | Schedule actions on Unity lifecycle events (Update, LateUpdate, etc.) |
 
 ## Third-Party Libraries
 

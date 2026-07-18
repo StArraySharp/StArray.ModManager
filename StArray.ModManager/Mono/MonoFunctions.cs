@@ -248,6 +248,9 @@ public unsafe class MonoFunctions
     public static nint MonoCompileMethod(nint method)
         => (nint)Methods.mono_compile_method((_MonoMethod*)method);
 
+    public static int MonoClassInit(nint klass)
+        => Methods.mono_class_init((_MonoClass*)klass);
+
     // ====================================================================
     //  Method Signature
     // ====================================================================
@@ -303,7 +306,16 @@ public unsafe class MonoFunctions
         => (nint)Methods.mono_object_new_specific((MonoVTable*)vtable);
 
     public static nint MonoObjectUnbox(nint obj)
-        => (nint)Methods.mono_object_unbox((_MonoObject*)obj);
+    {
+        try
+        {
+            return (nint)Methods.mono_object_unbox((_MonoObject*)obj);
+        }
+        catch (Exception)
+        {
+            return obj;
+        }
+    }
 
     public static nint MonoObjectGetClass(nint obj)
         => (nint)Methods.mono_object_get_class((_MonoObject*)obj);
@@ -345,6 +357,9 @@ public unsafe class MonoFunctions
 
     public static nuint MonoArrayLength(nint arr)
         => Methods.mono_array_length((_MonoArray*)arr);
+
+    public static nint MonoArrayAddrWithSize(nint arr, int elementSize, nuint index)
+        => (nint)Methods.mono_array_addr_with_size((_MonoArray*)arr, elementSize, index);
 
     public static nint MonoArrayClassGet(nint elementClass, uint rank)
         => (nint)Methods.mono_array_class_get((_MonoClass*)elementClass, rank);
@@ -470,7 +485,6 @@ public unsafe class MonoFunctions
         if (name != null)
         {
             MonoDomain.OnAssemblyLoad(name, (nint)assembly);
-            MonoDomain.FlushPending(name);
         }
     }
 

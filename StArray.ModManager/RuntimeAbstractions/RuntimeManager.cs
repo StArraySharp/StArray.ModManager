@@ -24,12 +24,15 @@ public static class RuntimeManager
     {
         if (OperatingSystem.IsWindows())
         {
-            if (GetModuleHandle("mono-2.0-bdwgc.dll") != IntPtr.Zero ||
-                GetModuleHandle("mono.dll") != IntPtr.Zero)
-                Backend = RuntimeBackend.Mono;
-            else if (GetModuleHandle("GameAssembly.dll") != IntPtr.Zero ||
-                     GetModuleHandle("unityplayer.dll") != IntPtr.Zero)
+            Backend = RuntimeBackend.None;
+            if (File.Exists(Path.Combine(AppContext.BaseDirectory,"..","..","GameAssembly.dll")))
+            {
                 Backend = RuntimeBackend.Il2Cpp;
+            }
+            if (File.Exists(Path.Combine(AppContext.BaseDirectory,"..","..","MonoBleedingEdge","EmbedRuntime","mono-2.0-bdwgc.dll")))
+            {
+                Backend = RuntimeBackend.Mono;
+            }
         }
         else if (OperatingSystem.IsAndroid())
         {
