@@ -87,6 +87,7 @@ public static class Managed
         var backend = RuntimeManager.Detect();
         Logger.Info("Runtime", $"Detected backend: {backend}");
 
+        HookHelper.Instance = new MinHook();
         // 检测图形设备类型
         //var renderer = GetGameRenderer();
         //Logger.Info("Backend", $"Detected renderer: {renderer}");

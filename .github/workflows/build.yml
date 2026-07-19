@@ -43,41 +43,41 @@ jobs:
           name: library-release.aar
           path: Android/library/build/outputs/aar/library-release.aar
 
-  # ──── Windows Native + .NET DLL ────
+  # ──── Windows Native + .NET DLL (cross-compiled on Linux) ────
   windows:
     name: Windows
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Set up MSYS2 (MinGW)
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: mingw64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-toolchain
+      - name: Install MinGW cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-mingw-w64-x86-64 \
+            g++-mingw-w64-x86-64 \
+            mingw-w64-tools \
+            cmake \
+            ninja-build
 
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build Native (CMake + MinGW)
-        shell: msys2 {0}
+      - name: Build Native (CMake + MinGW cross)
         run: |
           cd StArray.ModManager.Windows/Native
-          # Generate cimgui import lib from DLL
-          gendef - ../dlls/cimgui.dll > cimgui.def
-          dlltool -d cimgui.def -l libcimgui.a -D ../dlls/cimgui.dll
-          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          # Generate cimgui import lib from pre-built DLL
+          x86_64-w64-mingw32-gendef - ../dlls/cimgui.dll > cimgui.def
+          x86_64-w64-mingw32-dlltool -d cimgui.def -l libcimgui.a -D ../dlls/cimgui.dll
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres
           cmake --build build
 
       - name: Build C#
@@ -90,13 +90,13 @@ jobs:
           mkdir -p "$dst"
           cp -r "$src"/* "$dst/"
           rm -rf "$dst/runtimes"
-          tar -czf windows-dll.tar.gz -C "$dst" .
+          cd "$dst" && zip -r ../windows-dll.zip . && cd ..
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: windows-dll
-          path: windows-dll.tar.gz
+          path: windows-dll.zip
 
   # ──── Android .NET DLL ────
   android-dll:

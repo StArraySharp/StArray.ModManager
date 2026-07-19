@@ -78,8 +78,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         EglHooks.InstallHooks();
         EglHooks.OnEglSwapBuffers = OnSwapBuffers;
 
-        // 输入 Hook 委托给静态处理器
-        ImGuiInputHandler.InstallHooks();
+
 
         // 回放 Install 之前缓存的静态事件订阅
         if (s_pendingOnRender != null)
@@ -167,7 +166,8 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         // 创建 ImGui 上下文 + 加载嵌入式字体 msyh + FA 图标（共享接口）
         ((IImGuiRenderer)this).InitImGui();
         ImGuiInputHandler.IsInitialized = true;
-
+        // 输入 Hook 委托给静态处理器
+        ImGuiInputHandler.InstallHooks();
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.FontGlobalScale = 3.0f;

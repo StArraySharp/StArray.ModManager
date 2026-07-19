@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.Android.Native;
 
@@ -24,25 +26,6 @@ public static class Dobby
     /// <returns>0 = 成功，非 0 = 失败</returns>
     [DllImport(Lib, EntryPoint = "modmanager_dobby_hook")]
     public static extern int Hook(nint address, nint replace, out nint origin);
-
-    /// <summary>
-    /// 安装 inline hook — 支持直接传入 UnityResolve.MethodInfo。
-    /// 方法会被先 JIT 编译，再取其函数指针作为 replace 调用 Hook。
-    /// </summary>
-    /// <param name="address">目标函数地址</param>
-    /// <param name="replaceMethod">替换方法（UnityResolve.MethodInfo，需为静态方法）</param>
-    /// <param name="origin">[out] 原函数指针</param>
-    /// <returns>0 = 成功，非 0 = 失败</returns>
-    public static int Hook(nint address, UnityResolve.Method replaceMethod, out nint origin)
-    {
-        if (replaceMethod == null || !replaceMethod.IsValid)
-        {
-            origin = IntPtr.Zero;
-            return -1;
-        }
-        replaceMethod.Compile();
-        return Hook(address, replaceMethod.FunctionPtr, out origin);
-    }
 
     /// <summary>
     /// 安装 inline hook — 传入 C# Reflection MethodInfo。
@@ -83,7 +66,7 @@ public static class Dobby
     /// <param name="symbolName">符号名</param>
     /// <returns>符号地址，失败返回 nint.Zero</returns>
     [DllImport(Lib, EntryPoint = "modmanager_dobby_symbol_resolver")]
-    public static extern nint SymbolResolver(string imageName, string symbolName);
+    public static extern nint _SymbolResolver(string imageName, string symbolName);
 
     /// <summary>内存代码补丁。</summary>
     /// <param name="address">目标地址</param>
@@ -96,6 +79,11 @@ public static class Dobby
     /// <summary>获取 Dobby 版本字符串。</summary>
     [DllImport(Lib, EntryPoint = "modmanager_dobby_get_version")]
     private static extern nint _GetVersionRaw();
+    
+    public static IntPtr SymbolResolver(string imageName, string symbolName){
+        Logger.Error("Dobby::SymbolResolver",$"parseing: {imageName}:{symbolName}, stack:\n{new StackTrace()}");
+        return _SymbolResolver(imageName, symbolName);
+    }
 
     /// <summary>获取 Dobby 版本字符串。</summary>
     public static string GetVersion()

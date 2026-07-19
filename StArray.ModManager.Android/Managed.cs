@@ -7,6 +7,7 @@ using StArray.ModManager.Android.UI;
 using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Runtime;
+using StArray.ModManager.RuntimeAbstractions;
 
 namespace StArray.ModManager.Android;
 
@@ -58,19 +59,28 @@ public static class Managed
         AssemblyPath = Path.Combine(Path.GetDirectoryName(modsPath), "manager", typeof(Managed).Namespace + ".dll");
         if (!Directory.Exists(modsPath))
             Directory.CreateDirectory(modsPath);
-        Il2CppFunctions.SetIl2CppLibraryPath("libil2cpp.so");
+        NativeLibrary.SetDllImportResolver(typeof(Il2CppFunctions).Assembly, (libraryName, assembly, searchPath) =>
+        {
+            if (libraryName == "IL2CPP_LIBRARY_NAME")
+            {
+                return Il2CppInit();
+            }
+            return IntPtr.Zero;
+        });
 
         // 文件日志 → manager 根目录（与 mods/、runtime/ 同级）
         var rootDir = Path.GetDirectoryName(modsPath)!;
         _logWriter = new StreamWriter(Path.Combine(rootDir, "manager.log"), append: true) { AutoFlush = true };
+        _logWriter.AutoFlush = true;
         Logger.OnLog += (level, tag, msg) =>
         {
             lock (_logLock)
                 _logWriter?.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] [{tag}] {msg}");
         };
-
+        
         Logger.Error($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
-
+        var backend = RuntimeManager.Detect();
+        Logger.Info(nameof(Managed), "Backend: "+ backend);
         // 初始化
         Benchmark.Begin();
         var loader = new ModLoader(modsPath);
@@ -80,6 +90,7 @@ public static class Managed
         var ui = new ModManagerUI(loader, Path.GetDirectoryName(AssemblyPath)!);
         Logger.Error($"{nameof(Managed)}-Benchmark", $"ModManagerUI init: {Benchmark.End():F3}s");
 
+        HookHelper.Instance = new DobbyHook();
         Benchmark.Begin();
         ImGuiEGLRender.OnRender += ui.Render;
         ImGuiEGLRender.Install();
@@ -89,4 +100,7 @@ public static class Managed
         Logger.Error($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
         return 0;
     }
+    
+    [DllImport("modmanager", EntryPoint = "modmanager_il2cpp_init")]
+    private static extern IntPtr Il2CppInit();
 }

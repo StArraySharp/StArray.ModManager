@@ -23,8 +23,8 @@ add_compile_options(-Wno-deprecated-declarations)
 # ---- Source files ----
 set(MODMANAGER_SOURCES
     core/dobby_hook.cpp
-    core/unity_resolve.cpp
-    core/jni_helper.c
+        core/jni_helper.c
+        core/misc.c
 )
 
 set(MONODROID_SOURCES
