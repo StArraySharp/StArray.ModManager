@@ -24,7 +24,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\fa-solid-900.ttf" />
-    <EmbeddedResource Include="Resources\msyh.ttf" />
+    <EmbeddedResource Include="Resources\NotoSansCJK-Regular.otf" />
   </ItemGroup>
 
 </Project>

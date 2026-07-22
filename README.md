@@ -41,7 +41,7 @@ StArray.ModManager/              C# core library (.NET 10)
     MonoReflection.cs            Assembly/Class/Method/Field 反射
   Resources/                     嵌入资源
     fa-solid-900.ttf             FontAwesome 7 图标字体
-    msyh.ttf                     微软雅黑字体
+    NotoSansCJK-Regular.otf      Noto Sans CJK 中日韩字体
     L10n.cs / Localization.*     本地化字符串
   Runtime/                       Mod 框架接口
     HookAttributes.cs            [UnmanagedHook] 特性

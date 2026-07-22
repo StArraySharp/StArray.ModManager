@@ -49,7 +49,7 @@ public interface IImGuiRenderer
         {
             var asm = typeof(IImGuiRenderer).Assembly;
             using var stream = asm.GetManifestResourceStream(
-                "StArray.ModManager.Resources.msyh.ttf");
+                "StArray.ModManager.Resources.NotoSansCJK-Regular.otf");
             if (stream == null) return;
 
             var ttf = new byte[stream.Length];
