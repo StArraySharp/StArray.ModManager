@@ -2,35 +2,26 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
 using StArray.ModManager.Android.Native;
+using StArray.ModManager.Hooks;
 using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.Android.UI;
 
 /// <summary>ImGui input handler / 输入处理器 — touch/key hooks + IME control</summary>
-public static class ImGuiInputHandler
+public static partial class ImGuiInputHandler
 {
     /// <summary>ImGui 上下文就绪后由渲染器设置</summary>
     public static bool IsInitialized { get; set; }
-
-    private static InitializeMotionEventDelegate s_initializeMotionEvent;
-
-    private delegate int InitializeMotionEventDelegate(IntPtr self, IntPtr motionEvent, IntPtr message);
+    
 
     private static bool s_wantTextInputLast;
 
     /// <summary>
     /// 安装触摸事件和按键事件 Hook
     /// </summary>
-    public static void InstallHooks()
+    public static void InstallInputHooks()
     {
-        // —— 触摸事件 Hook ——
-        string consumerSymbol = "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE";
-        IntPtr consumerAddr = Dobby.SymbolResolver("libinput.so", consumerSymbol);
-        Dobby.Hook(consumerAddr,
-            typeof(ImGuiInputHandler).GetMethod(nameof(OnTouchEvent))!.MethodHandle.GetFunctionPointer(),
-            out var origin);
-        s_initializeMotionEvent = Marshal.GetDelegateForFunctionPointer<InitializeMotionEventDelegate>(origin);
-
+        InstallHooks();
         // IME 字符回调：Java nativeSendChar → C → 此回调 → ImGui
         NativeFunctions.SetOnAcceptCharCallback(codepoint =>
         {
@@ -55,12 +46,20 @@ public static class ImGuiInputHandler
     }
 
     /// <summary>触摸事件 Hook 回调</summary>
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int OnTouchEvent(IntPtr self, IntPtr motionEvent, IntPtr message)
+    [NativeHook("libinput.so","_ZN7android13InputConsumer14consumeSamplesEPNS_26InputEventFactoryInterfaceERNS0_5BatchEmPjPPNS_10InputEventE")]
+    public unsafe static long OnConsumeSamples(void* thiz,void* factory, IntPtr batch,
+        ulong count, uint* outSeq, void** outEvent)
     {
-        int result = s_initializeMotionEvent(self, motionEvent, message);
-        if (IsInitialized)
-            ImGuiImplAndroid.HandleInputEvent(self);
+        var result = OnConsumeSamplesOriginal(thiz,factory, batch, count, outSeq, outEvent);
+        if (IsInitialized && *outEvent != null) ImGuiImplAndroid.HandleInputEvent(new IntPtr(*outEvent));
+        return result;
+    }
+    
+    [NativeHook("libinput.so","_ZN7android13InputConsumer7consumeEPNS_26InputEventFactoryInterfaceEblPjPPNS_10InputEventE")]
+    public unsafe static long OnConsume(void* thiz, void* factory, bool consumeBatches, ulong frameTime, uint* outSeq, void** outEvent)
+    {
+        var result = OnConsumeOriginal(thiz, factory, consumeBatches, frameTime, outSeq, outEvent);
+        if (IsInitialized && *outEvent != null) ImGuiImplAndroid.HandleInputEvent(new IntPtr(*outEvent));
         return result;
     }
 

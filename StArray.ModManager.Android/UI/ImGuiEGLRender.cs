@@ -159,7 +159,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         ((IImGuiRenderer)this).InitImGui();
         ImGuiInputHandler.IsInitialized = true;
         // 输入 Hook 委托给静态处理器
-        ImGuiInputHandler.InstallHooks();
+        ImGuiInputHandler.InstallInputHooks();
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.FontGlobalScale = 3.0f;

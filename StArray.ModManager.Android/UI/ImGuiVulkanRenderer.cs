@@ -221,7 +221,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             Marshal.GetDelegateForFunctionPointer<VkQueuePresentKHRDelegate>(origPresent);
 
         // 输入 Hook
-        ImGuiInputHandler.InstallHooks();
+        ImGuiInputHandler.InstallInputHooks();
 
         // 回放缓存的静态事件订阅
         if (s_pendingOnRender != null)
