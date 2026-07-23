@@ -149,7 +149,6 @@ public class ModLoader
             if (!string.IsNullOrEmpty(mod.EntryPoint) && File.Exists(mod.EntryPoint))
             {
                 var assembly = Assembly.LoadFrom(mod.EntryPoint);
-                Logger.Info(nameof(ModLoader), $"{mod.Name} 程序集已加载: {assembly.GetName().Name}");
 
                 var pluginType = assembly.GetTypes()
                     .FirstOrDefault(t => typeof(IModPlugin).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
@@ -162,13 +161,7 @@ public class ModLoader
 
                     if (plugin is IModSettings s)
                         ModManagerUI.LoadSettings(mod, s);
-
-                    Logger.Info(nameof(ModLoader), $"{mod.Name} 插件入口已执行");
                 }
-            }
-            else
-            {
-                Logger.Info(nameof(ModLoader), $"{mod.Name} 无入口程序集，作为数据 Mod 加载");
             }
 
             mod.IsEnabled = true;

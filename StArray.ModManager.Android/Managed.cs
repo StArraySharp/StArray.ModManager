@@ -23,9 +23,6 @@ public static class Managed
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int Entry(int argc, IntPtr argv)
     {
-        var totalSw = Stopwatch.StartNew();
-
-        // 桥接 Logger → Android logcat
         Benchmark.Begin();
         Logger.OnLog += (level, tag, msg) =>
         {
@@ -39,20 +36,13 @@ public static class Managed
             };
             AndroidUtils.Write(prio, tag, msg);
         };
-        Logger.Error($"{nameof(Managed)}-Benchmark", $"Logger bridge: {Benchmark.End():F3}s");
-
-        // 解析命令行参数
-        Benchmark.Begin();
         string[] args = new string[argc];
         for (int i = 0; i < argc; i++)
         {
             IntPtr pStr = Marshal.ReadIntPtr(argv, i * IntPtr.Size);
             args[i] = Marshal.PtrToStringUTF8(pStr)!;
         }
-        Logger.Error($"{nameof(Managed)}-Benchmark", $"Args parse ({argc} args): {Benchmark.End():F3}s");
 
-        // 路径解析
-        Benchmark.Begin();
         string modsPath = args.Length > 0
             ? args[0]
             : Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "..", "mods");
@@ -61,7 +51,7 @@ public static class Managed
             Directory.CreateDirectory(modsPath);
         NativeLibrary.SetDllImportResolver(typeof(Il2CppFunctions).Assembly, (libraryName, assembly, searchPath) =>
         {
-            if (libraryName == "IL2CPP_LIBRARY_NAME")
+            if (libraryName.Contains("IL2CPP_LIBRARY_NAME"))
             {
                 return Il2CppInit();
             }
@@ -78,26 +68,14 @@ public static class Managed
                 _logWriter?.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] [{tag}] {msg}");
         };
         
-        Logger.Error($"{nameof(Managed)}-Benchmark", $"Path resolve: {Benchmark.End():F3}s");
-        var backend = RuntimeManager.Detect();
-        Logger.Info(nameof(Managed), "Backend: "+ backend);
-        // 初始化
-        Benchmark.Begin();
+        _ = RuntimeManager.Detect();
         var loader = new ModLoader(modsPath);
-        Logger.Error($"{nameof(Managed)}-Benchmark", $"ModLoader init: {Benchmark.End():F3}s");
-
-        Benchmark.Begin();
         var ui = new ModManagerUI(loader, Path.GetDirectoryName(AssemblyPath)!);
-        Logger.Error($"{nameof(Managed)}-Benchmark", $"ModManagerUI init: {Benchmark.End():F3}s");
-
         HookHelper.Instance = new DobbyHook();
-        Benchmark.Begin();
         ImGuiEGLRender.OnRender += ui.Render;
         ImGuiEGLRender.Install();
-        Logger.Error($"{nameof(Managed)}-Benchmark", $"ImGui install: {Benchmark.End():F3}s");
 
-        totalSw.Stop();
-        Logger.Error($"{nameof(Managed)}-Benchmark", $"=== Startup total: {totalSw.Elapsed.TotalSeconds:F3}s ===");
+        Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {Benchmark.End():F3}s ===");
         return 0;
     }
     

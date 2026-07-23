@@ -5,8 +5,5 @@
 #include <dlfcn.h>
 void* modmanager_il2cpp_init() {
     void* handle = dlopen("libil2cpp.so", RTLD_LAZY | RTLD_NOLOAD);
-    if (dlerror() == NULL) {
-        return handle;
-    }
-    return 0;
+    return handle;
 }

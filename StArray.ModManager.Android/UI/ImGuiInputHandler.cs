@@ -52,8 +52,6 @@ public static class ImGuiInputHandler
                 case 22:  io.AddKeyEvent(ImGuiKey.RightArrow, true); io.AddKeyEvent(ImGuiKey.RightArrow, false); break;  // KEYCODE_DPAD_RIGHT
             }
         });
-
-        Logger.Info(nameof(ImGuiInputHandler), "Input hooks installed");
     }
 
     /// <summary>触摸事件 Hook 回调</summary>

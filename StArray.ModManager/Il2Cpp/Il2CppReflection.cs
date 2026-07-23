@@ -15,8 +15,10 @@ public unsafe class Il2CppAssembly : IRuntimeAssembly
 
     public Il2CppClass? GetClass(string namespaze, string name)
     {
+        Il2CppDomain.Current.ThreadAttach();
         var img = Il2CppFunctions.il2cpp_assembly_get_image(Ptr);
         var k = Il2CppFunctions.il2cpp_class_from_name(img, namespaze, name.Replace('+', '/'));
+        Il2CppDomain.Current.ThreadDetach();
         return k != 0 ? new Il2CppClass(k) : null;
     }
 

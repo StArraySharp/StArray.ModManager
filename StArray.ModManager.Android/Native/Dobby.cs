@@ -81,7 +81,6 @@ public static class Dobby
     private static extern nint _GetVersionRaw();
     
     public static IntPtr SymbolResolver(string imageName, string symbolName){
-        Logger.Error("Dobby::SymbolResolver",$"parseing: {imageName}:{symbolName}, stack:\n{new StackTrace()}");
         return _SymbolResolver(imageName, symbolName);
     }
 

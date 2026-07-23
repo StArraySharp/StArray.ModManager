@@ -86,8 +86,6 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             _onRender += s_pendingOnRender;
             s_pendingOnRender = null;
         }
-
-        Logger.Error(nameof(ImGuiEGLRenderer), "eglSwapBuffers hooked via [NativeHook]");
         return true;
     }
 
@@ -150,9 +148,6 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
     private void InitImGui(IntPtr display, IntPtr surface)
     {
         if (_initialized) return;
-
-        Logger.Error(nameof(ImGuiEGLRenderer), "Initializing ImGui with official backends...");
-
         // 从 EGL surface 获取 ANativeWindow
         if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
             !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
@@ -160,9 +155,6 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             Logger.Error(nameof(ImGuiEGLRenderer), "Failed to query EGL surface for initialization");
             return;
         }
-
-        Logger.Error(nameof(ImGuiEGLRenderer), $"Surface size: {width}x{height}");
-
         // 创建 ImGui 上下文 + 加载嵌入式字体 msyh + FA 图标（共享接口）
         ((IImGuiRenderer)this).InitImGui();
         ImGuiInputHandler.IsInitialized = true;
@@ -182,23 +174,11 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         if (nativeWindow != IntPtr.Zero)
         {
             ImGuiImplAndroid.Init(nativeWindow);
-            Logger.Error(nameof(ImGuiEGLRenderer),
-                $"ImGui_ImplAndroid_Init success with window: 0x{nativeWindow:X}");
-        }
-        else
-        {
-            Logger.Error(nameof(ImGuiEGLRenderer),
-                "Failed to get Unity ANativeWindow, touch input may not work");
         }
 
         ImGuiImplOpenGL3.Init();
 
-        Logger.Error(nameof(ImGuiEGLRenderer),
-            "Touch input handled via ImGui_ImplAndroid");
-
         _initialized = true;
-        Logger.Error(nameof(ImGuiEGLRenderer),
-            "ImGui initialized with official OpenGL3 + Android input backends");
     }
 
     private void BuildUI()

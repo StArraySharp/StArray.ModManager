@@ -13,6 +13,8 @@ public unsafe class Il2CppDomain : IAppDomain
 
     private static void OnAssemblyLoad(string name, nint asm) => AssemblyLoad?.Invoke(name, asm);
 
+    private nint _thread;
+
     public static Il2CppDomain? Current
     {
         get
@@ -66,13 +68,14 @@ public unsafe class Il2CppDomain : IAppDomain
 
     public void ThreadAttach()
     {
-        Il2CppFunctions.il2cpp_thread_attach(Ptr);
+        if (_thread != 0) return;
+        _thread = Il2CppFunctions.il2cpp_thread_attach(Ptr);
     }
 
-    public static void ThreadDetach()
+    public void ThreadDetach()
     {
-        var thread = Il2CppFunctions.il2cpp_thread_current();
-        if (thread != 0)
-            Il2CppFunctions.il2cpp_thread_detach(thread);
+        if (_thread == 0) return;
+        Il2CppFunctions.il2cpp_thread_detach(_thread);
+        _thread = 0;
     }
 }

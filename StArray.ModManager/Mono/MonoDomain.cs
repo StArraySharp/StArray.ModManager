@@ -87,6 +87,7 @@ public unsafe class MonoDomain : IAppDomain
     }
     public void ThreadDetach()
     {
+        if (_thread == null) return;
         Methods.mono_thread_detach(_thread);
         _thread = null;
     }
