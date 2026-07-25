@@ -309,30 +309,18 @@ jobject jnihelper_get_current_activity() {
     return application;
 }
 
-// ===== 通用 JNI 调用辅助（供 C# P/Invoke 使用） =====
+// ===== 引用管理 =====
 
-jobject jnihelper_call_object_method(jobject obj, jmethodID methodID) {
+jobject jnihelper_new_global_ref(jobject obj) {
     JNIEnv *env = jnihelper_get_env();
-    if (env == NULL || obj == NULL || methodID == NULL) return NULL;
-    return (*env)->CallObjectMethod(env, obj, methodID);
+    if (env == NULL || obj == NULL) return NULL;
+    return (*env)->NewGlobalRef(env, obj);
 }
 
-jobject jnihelper_call_static_object_method(jclass clazz, jmethodID methodID) {
+jobject jnihelper_new_local_ref(jobject obj) {
     JNIEnv *env = jnihelper_get_env();
-    if (env == NULL || clazz == NULL || methodID == NULL) return NULL;
-    return (*env)->CallStaticObjectMethod(env, clazz, methodID);
-}
-
-jobject jnihelper_get_static_object_field(jclass clazz, jfieldID fieldID) {
-    JNIEnv *env = jnihelper_get_env();
-    if (env == NULL || clazz == NULL || fieldID == NULL) return NULL;
-    return (*env)->GetStaticObjectField(env, clazz, fieldID);
-}
-
-jobject jnihelper_get_object_field(jobject obj, jfieldID fieldID) {
-    JNIEnv *env = jnihelper_get_env();
-    if (env == NULL || obj == NULL || fieldID == NULL) return NULL;
-    return (*env)->GetObjectField(env, obj, fieldID);
+    if (env == NULL || obj == NULL) return NULL;
+    return (*env)->NewLocalRef(env, obj);
 }
 
 jclass jnihelper_get_object_class(jobject obj) {
@@ -340,6 +328,355 @@ jclass jnihelper_get_object_class(jobject obj) {
     if (env == NULL || obj == NULL) return NULL;
     return (*env)->GetObjectClass(env, obj);
 }
+
+// ===== 异常 =====
+
+void jnihelper_clear_exception() {
+    JNIEnv *env = jnihelper_get_env();
+    if (env != NULL) (*env)->ExceptionClear(env);
+}
+
+// ===== 字符串 =====
+
+const char* jnihelper_get_string_utf_chars(jstring jstr) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || jstr == NULL) return NULL;
+    return (*env)->GetStringUTFChars(env, jstr, NULL);
+}
+
+void jnihelper_release_string_utf_chars(jstring jstr, const char *utf) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env != NULL && jstr != NULL && utf != NULL)
+        (*env)->ReleaseStringUTFChars(env, jstr, utf);
+}
+
+jsize jnihelper_get_string_length(jstring jstr) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || jstr == NULL) return 0;
+    return (*env)->GetStringLength(env, jstr);
+}
+
+jstring jnihelper_new_string_utf(const char *utf) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || utf == NULL) return NULL;
+    return (*env)->NewStringUTF(env, utf);
+}
+
+// ===== 实例方法调用 (A 变体) =====
+
+jobject jnihelper_call_object_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return NULL;
+    return (*env)->CallObjectMethodA(env, obj, methodID, args);
+}
+
+jboolean jnihelper_call_boolean_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0;
+    return (*env)->CallBooleanMethodA(env, obj, methodID, args);
+}
+
+jbyte jnihelper_call_byte_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0;
+    return (*env)->CallByteMethodA(env, obj, methodID, args);
+}
+
+jchar jnihelper_call_char_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0;
+    return (*env)->CallCharMethodA(env, obj, methodID, args);
+}
+
+jshort jnihelper_call_short_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0;
+    return (*env)->CallShortMethodA(env, obj, methodID, args);
+}
+
+jint jnihelper_call_int_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0;
+    return (*env)->CallIntMethodA(env, obj, methodID, args);
+}
+
+jlong jnihelper_call_long_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0;
+    return (*env)->CallLongMethodA(env, obj, methodID, args);
+}
+
+jfloat jnihelper_call_float_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0.0f;
+    return (*env)->CallFloatMethodA(env, obj, methodID, args);
+}
+
+jdouble jnihelper_call_double_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return 0.0;
+    return (*env)->CallDoubleMethodA(env, obj, methodID, args);
+}
+
+void jnihelper_call_void_method_a(jobject obj, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return;
+    (*env)->CallVoidMethodA(env, obj, methodID, args);
+}
+
+// ===== 实例方法调用 (无参简版) =====
+
+jobject jnihelper_call_object_method(jobject obj, jmethodID methodID) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || methodID == NULL) return NULL;
+    return (*env)->CallObjectMethod(env, obj, methodID);
+}
+
+// ===== 静态方法调用 (A 变体) =====
+
+jobject jnihelper_call_static_object_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return NULL;
+    return (*env)->CallStaticObjectMethodA(env, clazz, methodID, args);
+}
+
+jboolean jnihelper_call_static_boolean_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0;
+    return (*env)->CallStaticBooleanMethodA(env, clazz, methodID, args);
+}
+
+jbyte jnihelper_call_static_byte_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0;
+    return (*env)->CallStaticByteMethodA(env, clazz, methodID, args);
+}
+
+jchar jnihelper_call_static_char_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0;
+    return (*env)->CallStaticCharMethodA(env, clazz, methodID, args);
+}
+
+jshort jnihelper_call_static_short_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0;
+    return (*env)->CallStaticShortMethodA(env, clazz, methodID, args);
+}
+
+jint jnihelper_call_static_int_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0;
+    return (*env)->CallStaticIntMethodA(env, clazz, methodID, args);
+}
+
+jlong jnihelper_call_static_long_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0;
+    return (*env)->CallStaticLongMethodA(env, clazz, methodID, args);
+}
+
+jfloat jnihelper_call_static_float_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0.0f;
+    return (*env)->CallStaticFloatMethodA(env, clazz, methodID, args);
+}
+
+jdouble jnihelper_call_static_double_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return 0.0;
+    return (*env)->CallStaticDoubleMethodA(env, clazz, methodID, args);
+}
+
+void jnihelper_call_static_void_method_a(jclass clazz, jmethodID methodID, jvalue *args) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return;
+    (*env)->CallStaticVoidMethodA(env, clazz, methodID, args);
+}
+
+// ===== 静态方法调用 (无参简版) =====
+
+jobject jnihelper_call_static_object_method(jclass clazz, jmethodID methodID) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || methodID == NULL) return NULL;
+    return (*env)->CallStaticObjectMethod(env, clazz, methodID);
+}
+
+// ===== 实例字段 Get/Set =====
+
+jobject jnihelper_get_object_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || obj == NULL || fieldID == NULL) return NULL;
+    return (*env)->GetObjectField(env, obj, fieldID);
+}
+jboolean jnihelper_get_boolean_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0;
+    return (*env)->GetBooleanField(env, obj, fieldID);
+}
+jbyte jnihelper_get_byte_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0;
+    return (*env)->GetByteField(env, obj, fieldID);
+}
+jchar jnihelper_get_char_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0;
+    return (*env)->GetCharField(env, obj, fieldID);
+}
+jshort jnihelper_get_short_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0;
+    return (*env)->GetShortField(env, obj, fieldID);
+}
+jint jnihelper_get_int_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0;
+    return (*env)->GetIntField(env, obj, fieldID);
+}
+jlong jnihelper_get_long_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0;
+    return (*env)->GetLongField(env, obj, fieldID);
+}
+jfloat jnihelper_get_float_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0.0f;
+    return (*env)->GetFloatField(env, obj, fieldID);
+}
+jdouble jnihelper_get_double_field(jobject obj, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return 0.0;
+    return (*env)->GetDoubleField(env, obj, fieldID);
+}
+
+void jnihelper_set_object_field(jobject obj, jfieldID fieldID, jobject value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetObjectField(env, obj, fieldID, value);
+}
+void jnihelper_set_boolean_field(jobject obj, jfieldID fieldID, jboolean value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetBooleanField(env, obj, fieldID, value);
+}
+void jnihelper_set_byte_field(jobject obj, jfieldID fieldID, jbyte value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetByteField(env, obj, fieldID, value);
+}
+void jnihelper_set_char_field(jobject obj, jfieldID fieldID, jchar value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetCharField(env, obj, fieldID, value);
+}
+void jnihelper_set_short_field(jobject obj, jfieldID fieldID, jshort value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetShortField(env, obj, fieldID, value);
+}
+void jnihelper_set_int_field(jobject obj, jfieldID fieldID, jint value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetIntField(env, obj, fieldID, value);
+}
+void jnihelper_set_long_field(jobject obj, jfieldID fieldID, jlong value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetLongField(env, obj, fieldID, value);
+}
+void jnihelper_set_float_field(jobject obj, jfieldID fieldID, jfloat value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetFloatField(env, obj, fieldID, value);
+}
+void jnihelper_set_double_field(jobject obj, jfieldID fieldID, jdouble value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !obj || !fieldID) return;
+    (*env)->SetDoubleField(env, obj, fieldID, value);
+}
+
+// ===== 静态字段 Get/Set =====
+
+jobject jnihelper_get_static_object_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || clazz == NULL || fieldID == NULL) return NULL;
+    return (*env)->GetStaticObjectField(env, clazz, fieldID);
+}
+jboolean jnihelper_get_static_boolean_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0;
+    return (*env)->GetStaticBooleanField(env, clazz, fieldID);
+}
+jbyte jnihelper_get_static_byte_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0;
+    return (*env)->GetStaticByteField(env, clazz, fieldID);
+}
+jchar jnihelper_get_static_char_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0;
+    return (*env)->GetStaticCharField(env, clazz, fieldID);
+}
+jshort jnihelper_get_static_short_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0;
+    return (*env)->GetStaticShortField(env, clazz, fieldID);
+}
+jint jnihelper_get_static_int_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0;
+    return (*env)->GetStaticIntField(env, clazz, fieldID);
+}
+jlong jnihelper_get_static_long_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0;
+    return (*env)->GetStaticLongField(env, clazz, fieldID);
+}
+jfloat jnihelper_get_static_float_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0.0f;
+    return (*env)->GetStaticFloatField(env, clazz, fieldID);
+}
+jdouble jnihelper_get_static_double_field(jclass clazz, jfieldID fieldID) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return 0.0;
+    return (*env)->GetStaticDoubleField(env, clazz, fieldID);
+}
+
+void jnihelper_set_static_object_field(jclass clazz, jfieldID fieldID, jobject value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticObjectField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_boolean_field(jclass clazz, jfieldID fieldID, jboolean value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticBooleanField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_byte_field(jclass clazz, jfieldID fieldID, jbyte value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticByteField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_char_field(jclass clazz, jfieldID fieldID, jchar value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticCharField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_short_field(jclass clazz, jfieldID fieldID, jshort value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticShortField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_int_field(jclass clazz, jfieldID fieldID, jint value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticIntField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_long_field(jclass clazz, jfieldID fieldID, jlong value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticLongField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_float_field(jclass clazz, jfieldID fieldID, jfloat value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticFloatField(env, clazz, fieldID, value);
+}
+void jnihelper_set_static_double_field(jclass clazz, jfieldID fieldID, jdouble value) {
+    JNIEnv *env = jnihelper_get_env(); if (!env || !clazz || !fieldID) return;
+    (*env)->SetStaticDoubleField(env, clazz, fieldID, value);
+}
+
+// ===== 数组 =====
+
+jsize jnihelper_get_array_length(jarray array) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || array == NULL) return 0;
+    return (*env)->GetArrayLength(env, array);
+}
+
+jobject jnihelper_get_object_array_element(jobjectArray array, jsize index) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || array == NULL) return NULL;
+    return (*env)->GetObjectArrayElement(env, array, index);
+}
+
+void jnihelper_set_object_array_element(jobjectArray array, jsize index, jobject value) {
+    JNIEnv *env = jnihelper_get_env();
+    if (env == NULL || array == NULL) return;
+    (*env)->SetObjectArrayElement(env, array, index, value);
+}
+
+// ===== Surface 转换 =====
 
 jobject jnihelper_surface_to_native_window(jobject surface) {
     JNIEnv *env = jnihelper_get_env();

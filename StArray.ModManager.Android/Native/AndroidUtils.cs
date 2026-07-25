@@ -29,7 +29,7 @@ public static class AndroidUtils
     {
         try
         {
-            var activity = JniHelperNative.GetCurrentActivity();
+            var activity = JniNative.GetCurrentActivity();
             if (activity != IntPtr.Zero) Info("AndroidUtils", $"Activity: 0x{activity:X}");
             return activity;
         }
@@ -41,14 +41,14 @@ public static class AndroidUtils
         try
         {
             using var toast = new JavaClass("android/widget/Toast");
-            var context = JniHelperNative.GetCurrentActivity();
+            var context = JniNative.GetCurrentActivity();
             if (context == IntPtr.Zero) return;
 
             var makeText = toast.GetStaticMethodID("makeText",
                 "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;");
-            var jMsg = JniHelperNative.NewString(message);
+            var jMsg = JniNative.NewString(message);
             var toastObj = toast.CallStaticObjectMethod3(makeText, context, jMsg, 0);
-            JniHelperNative.DeleteLocalRef(jMsg);
+            JniNative.DeleteLocalRef(jMsg);
 
             if (toastObj != IntPtr.Zero)
             {
@@ -75,10 +75,10 @@ public static class AndroidUtils
 
             using var actObj = new JavaObject(activity);
             using var actCls = actObj.GetClass();
-            var upField = JniHelperNative.GetFieldID(actCls.Handle, "mUnityPlayer",
+            var upField = JniNative.GetFieldID(actCls.Handle, "mUnityPlayer",
                 "Lcom/unity3d/player/UnityPlayerForActivityOrService;");
             if (upField == IntPtr.Zero)
-                upField = JniHelperNative.GetFieldID(actCls.Handle, "mUnityPlayer",
+                upField = JniNative.GetFieldID(actCls.Handle, "mUnityPlayer",
                     "Lcom/unity3d/player/UnityPlayer;");
             if (upField == IntPtr.Zero) return IntPtr.Zero;
 
@@ -87,21 +87,21 @@ public static class AndroidUtils
 
             using var pObj = new JavaObject(player);
             using var pCls = pObj.GetClass();
-            var getSV = JniHelperNative.GetMethodID(pCls.Handle, "getSurfaceView",
+            var getSV = JniNative.GetMethodID(pCls.Handle, "getSurfaceView",
                 "()Landroid/view/SurfaceView;");
             var sv = pObj.CallObjectMethod0(getSV);
             if (sv == IntPtr.Zero) return IntPtr.Zero;
 
             using var svObj = new JavaObject(sv);
-            var getH = JniHelperNative.GetMethodID(
-                JniHelperNative.FindClass("android/view/SurfaceView"), "getHolder",
+            var getH = JniNative.GetMethodID(
+                JniNative.FindClass("android/view/SurfaceView"), "getHolder",
                 "()Landroid/view/SurfaceHolder;");
             var holder = svObj.CallObjectMethod0(getH);
             if (holder == IntPtr.Zero) return IntPtr.Zero;
 
             using var hObj = new JavaObject(holder);
-            var getS = JniHelperNative.GetMethodID(
-                JniHelperNative.FindClass("android/view/SurfaceHolder"), "getSurface",
+            var getS = JniNative.GetMethodID(
+                JniNative.FindClass("android/view/SurfaceHolder"), "getSurface",
                 "()Landroid/view/Surface;");
             var surface = hObj.CallObjectMethod0(getS);
 
@@ -117,8 +117,8 @@ public static class AndroidUtils
         if (_cachedNativeWindow != IntPtr.Zero) return _cachedNativeWindow;
         var surface = GetUnitySurface();
         if (surface == IntPtr.Zero) return IntPtr.Zero;
-        _cachedNativeWindow = JniHelperNative.SurfaceToNativeWindow(surface);
-        JniHelperNative.DeleteLocalRef(surface);
+        _cachedNativeWindow = JniNative.SurfaceToNativeWindow(surface);
+        JniNative.DeleteLocalRef(surface);
         return _cachedNativeWindow;
     }
 
@@ -127,7 +127,7 @@ public static class AndroidUtils
     /// </summary>
     public static string? GetInternalFilesDir()
     {
-        var context = JniHelperNative.GetCurrentActivity();
+        var context = JniNative.GetCurrentActivity();
         if (context == IntPtr.Zero) return null;
         return GetDirFromContext(context, "getFilesDir", "()Ljava/io/File;");
     }
@@ -137,7 +137,7 @@ public static class AndroidUtils
     /// </summary>
     public static string? GetExternalFilesDir()
     {
-        var context = JniHelperNative.GetCurrentActivity();
+        var context = JniNative.GetCurrentActivity();
         if (context == IntPtr.Zero) return null;
         return GetDirFromContext(context, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;", null);
     }
@@ -148,14 +148,14 @@ public static class AndroidUtils
         {
             using var ctxObj = new JavaObject(context);
             using var ctxCls = ctxObj.GetClass();
-            var methodId = JniHelperNative.GetMethodID(ctxCls.Handle, methodName, sig);
+            var methodId = JniNative.GetMethodID(ctxCls.Handle, methodName, sig);
 
             IntPtr file;
             if (arg != null)
             {
-                var jArg = JniHelperNative.NewString(arg);
+                var jArg = JniNative.NewString(arg);
                 file = ctxObj.CallObjectMethod1(methodId, jArg);
-                JniHelperNative.DeleteLocalRef(jArg);
+                JniNative.DeleteLocalRef(jArg);
             }
             else
             {
@@ -166,11 +166,11 @@ public static class AndroidUtils
 
             using var fileObj = new JavaObject(file);
             using var fileCls = fileObj.GetClass();
-            var getPath = JniHelperNative.GetMethodID(fileCls.Handle, "getAbsolutePath", "()Ljava/lang/String;");
+            var getPath = JniNative.GetMethodID(fileCls.Handle, "getAbsolutePath", "()Ljava/lang/String;");
             var pathStr = fileObj.CallObjectMethod0(getPath);
 
             var result = JniHelperNative.GetString(pathStr);
-            JniHelperNative.DeleteLocalRef(pathStr);
+            JniNative.DeleteLocalRef(pathStr);
             return result;
         }
         catch (Exception ex) { Error("AndroidUtils", $"GetDirFromContext({methodName}): {ex}"); return null; }

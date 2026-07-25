@@ -158,8 +158,6 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         // 创建 ImGui 上下文 + 加载嵌入式字体 msyh + FA 图标（共享接口）
         ((IImGuiRenderer)this).InitImGui();
         ImGuiInputHandler.IsInitialized = true;
-        // 输入 Hook 委托给静态处理器
-        ImGuiInputHandler.InstallInputHooks();
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.FontGlobalScale = 3.0f;
@@ -177,7 +175,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         }
 
         ImGuiImplOpenGL3.Init();
-
+        ImGuiInputHandler.InstallInputHooks();
         _initialized = true;
     }
 

@@ -55,6 +55,7 @@ public static class Managed
             {
                 return Il2CppInit();
             }
+            
             return IntPtr.Zero;
         });
 

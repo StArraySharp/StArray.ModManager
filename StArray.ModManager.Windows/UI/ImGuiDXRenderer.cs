@@ -68,7 +68,7 @@ public sealed unsafe class ImGuiDXRenderer : IImGuiRenderer
     {
         if (s_i == null) return;
         ImGui.NewFrame();
-        try { s_i._onRender(); } catch (Exception e) { Logger.Error(nameof(ImGuiDXRenderer), $"Render error: {e.Message}"); }
+        try { s_i._onRender(); } catch (Exception e) { Logger.Error(nameof(ImGuiDXRenderer), $"Render error: {e}"); }
         ImGui.EndFrame();
         ImGui.Render();
     }

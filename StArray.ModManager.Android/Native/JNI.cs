@@ -1,129 +1,120 @@
 using System.Runtime.InteropServices;
+using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.Android.Native;
 
-/// <summary>
-/// Java 类封装 — 持有一个 jclass 全局引用，提供方法/字段查找和静态方法调用
-/// </summary>
-public sealed class JavaClass : IDisposable
+public sealed partial class JavaClass : IDisposable
 {
-    public readonly IntPtr Handle; // jclass global ref
+    public readonly IntPtr Handle;
     private bool _disposed;
 
-    /// <summary>通过 ClassLoader.loadClass 查找类</summary>
     public JavaClass(string className)
     {
-        var env = Env();
-        var localRef = FindViaClassLoader(env, className);
+        var localRef = FindViaClassLoader(className);
         if (localRef == IntPtr.Zero)
             throw new Exception($"JavaClass: '{className}' not found");
-        Handle = NewGlobalRef(env, localRef);
-        JniHelperNative.DeleteLocalRef(localRef);
+        Handle = JniNative.NewGlobalRef(localRef);
+        JniNative.DeleteLocalRef(localRef);
     }
 
-    /// <summary>包装已有的 jclass（自动转全局引用）</summary>
     public JavaClass(IntPtr clazz)
     {
-        Handle = NewGlobalRef(Env(), clazz);
+        Handle = JniNative.NewGlobalRef(clazz);
     }
-
 
     public IntPtr GetMethodID(string name, string sig)
-        => JniHelperNative.GetMethodID(Handle, name, sig);
+        => JniNative.GetMethodID(Handle, name, sig);
 
     public IntPtr GetStaticMethodID(string name, string sig)
-        => JniHelperNative.GetStaticMethodID(Handle, name, sig);
-
+        => JniNative.GetStaticMethodID(Handle, name, sig);
 
     public IntPtr GetFieldID(string name, string sig)
-        => JniHelperNative.GetFieldID(Handle, name, sig);
+        => JniNative.GetFieldID(Handle, name, sig);
 
     public IntPtr GetStaticFieldID(string name, string sig)
-        => JniHelperNative.GetStaticFieldID(Handle, name, sig);
+        => JniNative.GetStaticFieldID(Handle, name, sig);
 
     public IntPtr GetStaticObjectField(IntPtr fieldID)
-        => JniHelperNative.GetStaticObjectField(Handle, fieldID);
-
+        => JniNative.GetStaticObjectField(Handle, fieldID);
 
     public IntPtr CallStaticObjectMethod0(nint m)
-        => VTable<Obj0>(Env(), 111)(Env(), Handle, m);
+        => JniNative.CallStaticObjectMethod(Handle, m);
 
     public IntPtr CallStaticObjectMethod1(nint m, nint a1)
-        => VTable<Obj1>(Env(), 111)(Env(), Handle, m, a1);
-
-    public IntPtr CallStaticObjectMethod2(nint m, nint a1, nint a2)
-        => VTable<Obj2>(Env(), 111)(Env(), Handle, m, a1, a2);
-
-    public IntPtr CallStaticObjectMethod3(nint m, nint a1, nint a2, nint a3)
-        => VTable<Obj3>(Env(), 111)(Env(), Handle, m, a1, a2, a3);
-
-    public void CallStaticVoidMethod0(nint m)
-        => VTable<Void0>(Env(), 120)(Env(), Handle, m);
-
-    public void CallStaticVoidMethod1(nint m, nint a1)
-        => VTable<Void1>(Env(), 120)(Env(), Handle, m, a1);
-
-    public int CallStaticIntMethod0(nint m)
     {
-        // arm64: delegate 返回 nint 再截低 32 位，避免 int 返回值 marshalling 损坏
-        nint v = VTable<IntRet>(Env(), 116)(Env(), Handle, m);
-        return (int)(v & 0xFFFFFFFFL);
+        JValue[] args = [new() { L = a1 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                return JniNative.CallStaticObjectMethodA(Handle, m, (nint)p);
+        }
     }
 
-    /// <summary>创建 Java String</summary>
-    public nint NewString(string s) => JniHelperNative.NewString(s);
+    public IntPtr CallStaticObjectMethod2(nint m, nint a1, nint a2)
+    {
+        JValue[] args = [new() { L = a1 }, new() { L = a2 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                return JniNative.CallStaticObjectMethodA(Handle, m, (nint)p);
+        }
+    }
+
+    public IntPtr CallStaticObjectMethod3(nint m, nint a1, nint a2, nint a3)
+    {
+        JValue[] args = [new() { L = a1 }, new() { L = a2 }, new() { L = a3 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                return JniNative.CallStaticObjectMethodA(Handle, m, (nint)p);
+        }
+    }
+
+    public void CallStaticVoidMethod0(nint m)
+        => JniNative.CallStaticVoidMethodA(Handle, m, IntPtr.Zero);
+
+    public void CallStaticVoidMethod1(nint m, nint a1)
+    {
+        JValue[] args = [new() { L = a1 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                JniNative.CallStaticVoidMethodA(Handle, m, (nint)p);
+        }
+    }
+
+    public int CallStaticIntMethod0(nint m)
+        => JniNative.CallStaticIntMethodA(Handle, m, IntPtr.Zero);
+
+    public nint NewString(string s) => JniNative.NewString(s);
 
     public void Dispose()
     {
-        if (!_disposed) { JniHelperNative.DeleteGlobalRef(Handle); _disposed = true; }
+        if (!_disposed) { JniNative.DeleteGlobalRef(Handle); _disposed = true; }
     }
 
-
-    private static nint Env() => JniHelperNative.GetJNIEnv();
-
-
-    private static IntPtr FindViaClassLoader(IntPtr env, string name)
+    private static IntPtr FindViaClassLoader(string name)
     {
-        var atClass = JniHelperNative.FindClass("android/app/ActivityThread");
+        var atClass = JniNative.FindClass("android/app/ActivityThread");
         if (atClass == IntPtr.Zero) return IntPtr.Zero;
-        var curAt = JniHelperNative.GetStaticMethodID(atClass, "currentActivityThread", "()Landroid/app/ActivityThread;");
-        var at = VTable<Obj0>(env, 34)(env, atClass, curAt);
-        var getApp = JniHelperNative.GetMethodID(atClass, "getApplication", "()Landroid/app/Application;");
-        var app = VTable<Obj0>(env, 34)(env, at, getApp);
-        var appCls = JniHelperNative.GetObjectClass(app);
-        var getCl = JniHelperNative.GetMethodID(appCls, "getClassLoader", "()Ljava/lang/ClassLoader;");
-        var cl = VTable<Obj0>(env, 34)(env, app, getCl);
-        var clCls = JniHelperNative.GetObjectClass(cl);
-        var loadClass = JniHelperNative.GetMethodID(clCls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-        var jName = JniHelperNative.NewString(name);
-        var result = VTable<Obj1>(env, 34)(env, cl, loadClass, jName);
-        JniHelperNative.DeleteLocalRef(jName);
+        var curApp = JniNative.GetStaticMethodID(atClass, "currentApplication", "()Landroid/app/Application;");
+        var app = JniNative.CallStaticObjectMethod(atClass, curApp);
+        JniNative.DeleteGlobalRef(atClass);
+        Logger.Error("CL", "GetStaticMethodID currentApplication");
+        var appCls = JniNative.GetObjectClass(app);
+        var getCl = JniNative.GetMethodID(appCls, "getClassLoader", "()Ljava/lang/ClassLoader;");
+        var cl = JniNative.CallObjectMethod(app, getCl);
+        var clCls = JniNative.GetObjectClass(cl);
+        Logger.Error("CL", "GetMethodID getClassLoader");
+        var loadClass = JniNative.GetMethodID(clCls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+        var jName = JniNative.NewString(name);
+        Logger.Error("CL", "NewString");
+        var result = new JavaObject(cl).CallObjectMethod1(loadClass, jName);
+        JniNative.DeleteLocalRef(jName);
         return result;
     }
-
-
-    private static IntPtr NewGlobalRef(IntPtr env, IntPtr obj)
-        => VTable<ObjRef2>(env, 21)(env, obj);
-
-    private static T VTable<T>(IntPtr env, int idx) where T : Delegate
-    {
-        var tbl = Marshal.ReadIntPtr(env);
-        return Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(tbl + idx * IntPtr.Size));
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr ObjRef2(IntPtr e, IntPtr o);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj0(IntPtr e, IntPtr o, IntPtr m);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj1(IntPtr e, IntPtr o, IntPtr m, nint a);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj2(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj3(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2, nint a3);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void0(IntPtr e, IntPtr o, IntPtr m);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void1(IntPtr e, IntPtr o, IntPtr m, nint a);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate nint IntRet(IntPtr e, IntPtr o, IntPtr m);
 }
 
-/// <summary>
-/// Java 对象封装 — 持有一个 jobject 本地引用，提供实例方法调用和字段读取
-/// </summary>
 public sealed class JavaObject : IDisposable
 {
     public readonly IntPtr Handle;
@@ -131,58 +122,75 @@ public sealed class JavaObject : IDisposable
 
     public JavaObject(IntPtr obj) => Handle = obj;
 
-
     public IntPtr CallObjectMethod0(IntPtr m)
-        => VTable<Obj0>(Env(), 34)(Env(), Handle, m);
+        => JniNative.CallObjectMethod(Handle, m);
 
     public IntPtr CallObjectMethod1(IntPtr m, IntPtr a1)
-        => VTable<Obj1>(Env(), 34)(Env(), Handle, m, a1);
+    {
+        JValue[] args = [new() { L = a1 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                return JniNative.CallObjectMethodA(Handle, m, (nint)p);
+        }
+    }
 
     public IntPtr CallObjectMethod2(IntPtr m, IntPtr a1, IntPtr a2)
-        => VTable<Obj2>(Env(), 34)(Env(), Handle, m, a1, a2);
+    {
+        JValue[] args = [new() { L = a1 }, new() { L = a2 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                return JniNative.CallObjectMethodA(Handle, m, (nint)p);
+        }
+    }
 
     public void CallVoidMethod0(IntPtr m)
-        => VTable<Void0>(Env(), 45)(Env(), Handle, m);
+        => JniNative.CallVoidMethodA(Handle, m, IntPtr.Zero);
 
     public void CallVoidMethod1(IntPtr m, IntPtr a1)
-        => VTable<Void1>(Env(), 45)(Env(), Handle, m, a1);
+    {
+        JValue[] args = [new() { L = a1 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                JniNative.CallVoidMethodA(Handle, m, (nint)p);
+        }
+    }
 
     public void CallVoidMethod2(IntPtr m, IntPtr a1, IntPtr a2)
-        => VTable<Void2>(Env(), 45)(Env(), Handle, m, a1, a2);
+    {
+        JValue[] args = [new() { L = a1 }, new() { L = a2 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                JniNative.CallVoidMethodA(Handle, m, (nint)p);
+        }
+    }
 
     public bool CallBoolMethod2(IntPtr m, IntPtr a1, IntPtr a2)
-        => VTable<Bool2>(Env(), 37)(Env(), Handle, m, a1, a2) != 0;
-
+    {
+        JValue[] args = [new() { L = a1 }, new() { L = a2 }];
+        unsafe
+        {
+            fixed (JValue* p = args)
+                return JniNative.CallBooleanMethodA(Handle, m, (nint)p);
+        }
+    }
 
     public IntPtr GetObjectField(IntPtr fieldID)
-        => JniHelperNative.GetObjectField(Handle, fieldID);
+        => JniNative.GetObjectField(Handle, fieldID);
 
-
-    public JavaClass GetClass() => new(JniHelperNative.GetObjectClass(Handle));
+    public JavaClass GetClass() => new(JniNative.GetObjectClass(Handle));
 
     public void Dispose()
     {
-        if (!_disposed) { JniHelperNative.DeleteLocalRef(Handle); _disposed = true; }
+        if (!_disposed) { JniNative.DeleteLocalRef(Handle); _disposed = true; }
     }
-
-
-    private static IntPtr Env() => JniHelperNative.GetJNIEnv();
-
-    private static T VTable<T>(IntPtr env, int idx) where T : Delegate
-    {
-        var tbl = Marshal.ReadIntPtr(env);
-        return Marshal.GetDelegateForFunctionPointer<T>(Marshal.ReadIntPtr(tbl + idx * IntPtr.Size));
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj0(IntPtr e, IntPtr o, IntPtr m);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj1(IntPtr e, IntPtr o, IntPtr m, nint a);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Obj2(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void0(IntPtr e, IntPtr o, IntPtr m);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void1(IntPtr e, IntPtr o, IntPtr m, nint a);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Void2(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate byte Bool2(IntPtr e, IntPtr o, IntPtr m, nint a1, nint a2);
 }
-public static class NativeFunctions {
+
+public static class NativeFunctions
+{
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void OnAcceptChar(uint codepoint);
 
