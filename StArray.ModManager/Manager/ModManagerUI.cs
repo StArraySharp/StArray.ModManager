@@ -208,10 +208,10 @@ public partial class ModManagerUI
                         ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg |
                         ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY))
                     {
-                        ImGui.TableSetupColumn(L10n.Get("Col_State"), ImGuiTableColumnFlags.WidthFixed, 50);
+                        ImGui.TableSetupColumn(L10n.Get("Col_State"), ImGuiTableColumnFlags.WidthFixed, 100);
                         ImGui.TableSetupColumn(L10n.Get("Col_Name"), ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn(L10n.Get("Col_Version"), ImGuiTableColumnFlags.WidthFixed, 80);
-                        ImGui.TableSetupColumn(L10n.Get("Col_Settings"), ImGuiTableColumnFlags.WidthFixed, 50);
+                        ImGui.TableSetupColumn(L10n.Get("Col_Version"), ImGuiTableColumnFlags.WidthFixed, 100);
+                        ImGui.TableSetupColumn(L10n.Get("Col_Settings"), ImGuiTableColumnFlags.WidthFixed, 100);
                         ImGui.TableHeadersRow();
 
                         foreach (var mod in _modManager.Mods)

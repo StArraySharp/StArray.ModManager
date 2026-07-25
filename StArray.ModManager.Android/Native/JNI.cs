@@ -100,15 +100,12 @@ public sealed partial class JavaClass : IDisposable
         var curApp = JniNative.GetStaticMethodID(atClass, "currentApplication", "()Landroid/app/Application;");
         var app = JniNative.CallStaticObjectMethod(atClass, curApp);
         JniNative.DeleteGlobalRef(atClass);
-        Logger.Error("CL", "GetStaticMethodID currentApplication");
         var appCls = JniNative.GetObjectClass(app);
         var getCl = JniNative.GetMethodID(appCls, "getClassLoader", "()Ljava/lang/ClassLoader;");
         var cl = JniNative.CallObjectMethod(app, getCl);
         var clCls = JniNative.GetObjectClass(cl);
-        Logger.Error("CL", "GetMethodID getClassLoader");
         var loadClass = JniNative.GetMethodID(clCls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
         var jName = JniNative.NewString(name);
-        Logger.Error("CL", "NewString");
         var result = new JavaObject(cl).CallObjectMethod1(loadClass, jName);
         JniNative.DeleteLocalRef(jName);
         return result;
