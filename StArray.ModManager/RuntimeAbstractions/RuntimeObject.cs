@@ -163,7 +163,9 @@ public readonly unsafe struct RuntimeObject
 }
 
 /// <summary>
-/// 类型�?RuntimeObject —�?通过 <see cref="GetInstance"/> 创建 <typeparamref name="T"/> 实例�?/// T 需继承 <see cref="UnmanagedObject"/> 并实�?<c>T(nint ptr)</c> 构造函数�?/// </summary>
+/// 类型：RuntimeObject —— 通过 <see cref="GetInstance"/> 创建 <typeparamref name="T"/> 实例。
+/// T 需继承 <see cref="UnmanagedObject"/> 并实现 <c>T(nint ptr)</c> 构造函数。
+/// </summary>
 public readonly unsafe struct RuntimeObject<T> where T : UnmanagedObject
 {
     public nint Ptr { get; }
@@ -172,7 +174,7 @@ public readonly unsafe struct RuntimeObject<T> where T : UnmanagedObject
     public RuntimeObject(RuntimeObject obj) => Ptr = obj.Ptr;
     public bool IsValid => Ptr != 0;
 
-    /// <summary>通过构造函数创�?T 实例。若指针指向静态类则抛异常�?/summary>
+    /// <summary>通过构造函数创建 T 实例。若指针指向静态类则抛异常。</summary>
     public T GetInstance()
     {
         if (Ptr == 0)
@@ -182,7 +184,7 @@ public readonly unsafe struct RuntimeObject<T> where T : UnmanagedObject
         return (T)Activator.CreateInstance(typeof(T), Ptr)!;
     }
 
-    /// <summary>检查当前指针对应的运行时类型是否为静态类（abstract + sealed）�?/summary>
+    /// <summary>检查当前指针对应的运行时类型是否为静态类（abstract + sealed）。</summary>
     private bool IsStaticClass()
     {
         var klass = GetClassPtr();

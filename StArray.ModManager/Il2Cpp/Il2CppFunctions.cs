@@ -636,13 +636,57 @@ public unsafe class Il2CppFunctions
     [DllImport("IL2CPP_LIBRARY_NAME", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void il2cpp_custom_attrs_free(IntPtr ainfo);
 
+    // ── 库解析 ──
+    //
+    // DllImport 的库名必须是编译期常量，而 il2cpp 宿主库的路径要到运行时才知道，
+    // 所以上面统一写成占位符，由 DllImportResolver 转成真实路径。
+
+    private const string LibraryPlaceholder = "IL2CPP_LIBRARY_NAME";
+
+    private static readonly object _resolverLock = new();
+    private static string? _libraryPath;
+    private static IntPtr _libraryHandle;
+    private static bool _resolverRegistered;
+
+    /// <summary>
+    /// 指定 il2cpp 宿主库路径。可安全地重复调用：
+    /// <see cref="NativeLibrary.SetDllImportResolver"/> 对同一程序集只允许注册一次
+    /// （再次注册会抛 <see cref="InvalidOperationException"/>），因此这里只注册一次，
+    /// 由解析器读取最新路径。传入新路径会让下次解析重新加载。
+    /// </summary>
     public static void SetIl2CppLibraryPath(string path)
     {
-        //用DllImportResolver处理
-        NativeLibrary.SetDllImportResolver(typeof(Il2CppFunctions).Assembly, (libraryName, assembly, searchPath) => 
+        lock (_resolverLock)
         {
-            if (libraryName == "IL2CPP_LIBRARY_NAME") return NativeLibrary.Load(path);
-            return IntPtr.Zero;
-        });
+            if (!string.Equals(_libraryPath, path, StringComparison.Ordinal))
+            {
+                _libraryPath = path;
+                _libraryHandle = IntPtr.Zero;
+            }
+
+            if (_resolverRegistered) return;
+            NativeLibrary.SetDllImportResolver(typeof(Il2CppFunctions).Assembly, ResolveLibrary);
+            _resolverRegistered = true;
+        }
+    }
+
+    private static IntPtr ResolveLibrary(string libraryName, System.Reflection.Assembly assembly,
+        DllImportSearchPath? searchPath)
+    {
+        // 其他库名交还默认解析流程，别影响同程序集里的其它 P/Invoke
+        if (libraryName != LibraryPlaceholder) return IntPtr.Zero;
+
+        lock (_resolverLock)
+        {
+            if (_libraryHandle != IntPtr.Zero) return _libraryHandle;
+            if (string.IsNullOrEmpty(_libraryPath)) return IntPtr.Zero;
+
+            // 用 TryLoad：从解析器里抛出的异常会直接冒到调用点，盖住真正的原因。
+            // 返回 0 让运行时报标准的 DllNotFoundException（消息里带着占位符名，便于定位）。
+            if (!NativeLibrary.TryLoad(_libraryPath, out _libraryHandle))
+                _libraryHandle = IntPtr.Zero;
+
+            return _libraryHandle;
+        }
     }
 }

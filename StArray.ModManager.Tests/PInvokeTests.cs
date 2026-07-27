@@ -1,4 +1,4 @@
-﻿using StArray.ModManager.Il2Cpp;
+using StArray.ModManager.Il2Cpp;
 
 namespace StArray.ModManager.Tests;
 

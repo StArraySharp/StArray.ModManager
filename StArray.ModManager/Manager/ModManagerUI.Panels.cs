@@ -83,11 +83,12 @@ partial class ModManagerUI
         try
         {
             var path = Path.Combine(mod.FolderPath, "settings.json");
-            var fields = ModInspector.GetInspectorFields(settings.GetType());
+            // 与检查器共用同一份成员元数据：面板里能改的（属性、静态成员、private 字段）
+            // 就一定能存下来。反射式序列化，因为设置字段的类型由各 mod 自由决定。
             var dict = new Dictionary<string, object?>();
-            foreach (var f in fields)
-                dict[f.Name] = f.GetValue(settings);
-            var json = JsonSerializer.Serialize(dict, ModManagerJsonContext.Default.DictionaryStringObject);
+            foreach (var m in ModInspector.GetSettingMembers(settings.GetType()))
+                dict[m.Name] = m.Get(settings);
+            var json = JsonSerializer.Serialize(dict, ModInspector.SettingsJson);
             File.WriteAllText(path, json);
             _toastMessage = FontAwesome7.CircleCheck + " " + L10n.Get("Toast.ModSaved", mod.Name);
             _toastTimer = 2.5f;
@@ -109,14 +110,21 @@ partial class ModManagerUI
             if (!File.Exists(path)) return;
 
             var json = File.ReadAllText(path);
-            var dict = JsonSerializer.Deserialize(json, ModManagerJsonContext.Default.DictionaryStringJsonElement);
+            var dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ModInspector.SettingsJson);
             if (dict == null) return;
 
-            var type = settings.GetType();
-            foreach (var f in ModInspector.GetInspectorFields(type))
+            foreach (var m in ModInspector.GetSettingMembers(settings.GetType()))
             {
-                if (dict.TryGetValue(f.Name, out var elem))
-                    f.SetValue(settings, elem.Deserialize(f.FieldType));
+                if (!dict.TryGetValue(m.Name, out var elem)) continue;
+                try
+                {
+                    m.Set(settings, elem.Deserialize(m.ValueType, ModInspector.SettingsJson));
+                }
+                catch (Exception ex)
+                {
+                    // 单个字段的类型对不上（改过类型 / 手改过 json）不应拖垮整份设置
+                    Logger.Warn(nameof(ModManagerUI), $"LoadSettings: {m.Name}: {ex.Message}");
+                }
             }
         }
         catch (Exception ex)

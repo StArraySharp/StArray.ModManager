@@ -37,3 +37,14 @@ public interface IModPlugin
     /// <summary>前景层绘制（ImGui 窗口上方），可用于 FPS 等全局 HUD</summary>
     void OnForegroundGUI(ImDrawListPtr drawList) { }
 }
+
+/// <summary>
+/// 程序集级标注，直接指出本程序集里的 <see cref="IModPlugin"/> 实现类型。
+/// 加载器读到它就无需 <c>GetTypes()</c> 全量扫描 —— 对生成的存根程序集尤其重要：
+/// 类型数以万计，且任何一个类型加载失败都会让整次扫描抛异常。
+/// </summary>
+[AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false)]
+public sealed class ModEntryPointAttribute(Type pluginType) : Attribute
+{
+    public Type PluginType { get; } = pluginType;
+}

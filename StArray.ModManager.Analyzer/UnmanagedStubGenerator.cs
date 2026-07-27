@@ -1,0 +1,354 @@
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace StArray.ModManager.Analyzer;
+
+[Generator]
+public class UnmanagedStubGenerator : IIncrementalGenerator
+{
+    private const string TypeAttrName = "StArray.ModManager.RuntimeAbstractions.UnmanagedTypeAttribute";
+    private const string MemberAttrName = "StArray.ModManager.RuntimeAbstractions.UnmanagedMemberAttribute";
+
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        var classes = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => IsClassWithAttributes(node),
+                transform: static (ctx, _) => GetClassInfo(ctx))
+            .Where(static info => info != null)!;
+
+        context.RegisterSourceOutput(
+            context.CompilationProvider.Combine(classes.Collect()),
+            static (spc, t) => Generate(spc, t.Left, t.Right));
+    }
+
+    private static bool IsClassWithAttributes(SyntaxNode node)
+    {
+        return node is ClassDeclarationSyntax cds &&
+               cds.AttributeLists.Count > 0 &&
+               cds.Modifiers.Any(SyntaxKind.PartialKeyword);
+    }
+
+    private sealed class UnmanagedClassInfo
+    {
+        public string Namespace { get; set; } = "";
+        public string ClassName { get; set; } = "";
+        public string FullType { get; set; } = "";
+        public string? Assembly { get; set; }
+        public string? TypeNs { get; set; }
+        public string? TypeName { get; set; }
+        public bool HasBaseType { get; set; }
+        public List<MemberInfo> Members { get; set; } = new();
+    }
+
+    private sealed class MemberInfo
+    {
+        public string MethodName { get; set; } = "";
+        public string ReturnType { get; set; } = "";
+        public bool IsStatic { get; set; }
+        public string Accessibility { get; set; } = "public";
+        public List<(string Type, string Name)> Parameters { get; set; } = new();
+    }
+
+    private static UnmanagedClassInfo? GetClassInfo(GeneratorSyntaxContext ctx)
+    {
+        var cls = (ClassDeclarationSyntax)ctx.Node;
+        var sem = ctx.SemanticModel;
+        var sym = sem.GetDeclaredSymbol(cls);
+        if (sym is null) return null;
+
+        var typeAttr = sym.GetAttributes().FirstOrDefault(a =>
+            a.AttributeClass?.ToDisplayString() == TypeAttrName);
+        if (typeAttr is null) return null;
+
+        var info = new UnmanagedClassInfo
+        {
+            Namespace = sym.ContainingNamespace.IsGlobalNamespace ? "" : sym.ContainingNamespace.ToDisplayString(),
+            ClassName = sym.Name,
+            FullType = sym.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            Assembly = typeAttr.ConstructorArguments.Length > 0
+                ? typeAttr.ConstructorArguments[0].Value?.ToString() : null,
+            TypeNs = typeAttr.ConstructorArguments.Length > 1
+                ? typeAttr.ConstructorArguments[1].Value?.ToString() : null,
+            TypeName = typeAttr.ConstructorArguments.Length > 2
+                ? typeAttr.ConstructorArguments[2].Value?.ToString() : null,
+            HasBaseType = sym.BaseType != null &&
+                          sym.BaseType.SpecialType != SpecialType.System_Object,
+        };
+
+        foreach (var member in sym.GetMembers())
+        {
+            if (member is not IMethodSymbol method) continue;
+            if (!method.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString() == MemberAttrName)) continue;
+            if (!method.IsPartialDefinition) continue;
+
+            var access = method.DeclaredAccessibility switch
+            {
+                Accessibility.Public => "public",
+                Accessibility.Private => "private",
+                Accessibility.Protected => "protected",
+                Accessibility.Internal => "internal",
+                _ => "public",
+            };
+            var mi = new MemberInfo
+            {
+                MethodName = method.Name,
+                ReturnType = method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                IsStatic = method.IsStatic,
+                Accessibility = access,
+                Parameters = method.Parameters.Select(p =>
+                    (p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), p.Name)).ToList(),
+            };
+            info.Members.Add(mi);
+        }
+
+        return info.Members.Count > 0 ? info : null;
+    }
+
+    private static void Generate(SourceProductionContext spc, Compilation compilation,
+        ImmutableArray<UnmanagedClassInfo> classes)
+    {
+        if (classes.Length == 0) return;
+
+        foreach (var cls in classes)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("// <auto-generated/>");
+            sb.AppendLine("#pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8618, CS8625");
+            sb.AppendLine("#nullable enable");
+            sb.AppendLine();
+
+            var hasNs = !string.IsNullOrEmpty(cls.Namespace);
+            var indent = hasNs ? "    " : "";
+            var body = hasNs ? "        " : "    ";
+
+            if (hasNs)
+            {
+                sb.AppendLine($"namespace {cls.Namespace}");
+                sb.AppendLine("{");
+            }
+
+            var hasStatic = cls.Members.Any(m => m.IsStatic);
+
+            sb.AppendLine($"{indent}using global::StArray.ModManager.RuntimeAbstractions;");
+            sb.AppendLine();
+            sb.Append($"{indent}public unsafe partial class {cls.ClassName}");
+            if (!cls.HasBaseType)
+                sb.Append(" : global::StArray.ModManager.RuntimeAbstractions.UnmanagedObject");
+            sb.AppendLine();
+            sb.AppendLine($"{indent}{{");
+            if (!cls.HasBaseType)
+            {
+                sb.AppendLine($"{body}public {cls.ClassName}(nint ptr) : base(ptr) {{ }}");
+                sb.AppendLine();
+            }
+
+            if (hasStatic && cls.Assembly != null && cls.TypeName != null)
+            {
+                sb.AppendLine($"{body}private static IRuntimeClass? s_resolvedClass;");
+                sb.AppendLine($"{body}private static bool s_classResolved;");
+                sb.AppendLine();
+                sb.AppendLine($"{body}private static IRuntimeClass? ResolveClass()");
+                sb.AppendLine($"{body}{{");
+                sb.AppendLine($"{body}    if (!s_classResolved)");
+                sb.AppendLine($"{body}    {{");
+                sb.AppendLine($"{body}        var domain = RuntimeManager.GetDomain();");
+                sb.AppendLine($"{body}        var asm = domain?.OpenAssembly(\"{EscapeString(cls.Assembly)}\");");
+                sb.AppendLine($"{body}        s_resolvedClass = asm?.GetClass(\"{EscapeString(cls.TypeNs ?? "")}\", \"{EscapeString(cls.TypeName)}\");");
+                sb.AppendLine($"{body}        s_classResolved = true;");
+                sb.AppendLine($"{body}    }}");
+                sb.AppendLine($"{body}    return s_resolvedClass;");
+                sb.AppendLine($"{body}}}");
+                sb.AppendLine();
+            }
+
+            // generate all members as standalone partial method implementations
+            // (get_/set_, add_/remove_ are just methods — no property/event wrappers)
+            foreach (var m in cls.Members)
+                GenerateMethod(sb, m, body);
+
+            sb.AppendLine($"{indent}}}");
+            if (hasNs) sb.AppendLine("}");
+            sb.AppendLine();
+
+            spc.AddSource($"Unmanaged_{cls.ClassName}.g.cs", sb.ToString());
+        }
+    }
+
+    private static void GenerateMethod(StringBuilder sb, MemberInfo m, string body)
+    {
+        var pd = string.Join(", ", m.Parameters.Select(p => $"{SimplifyType(p.Type)} @{p.Name}"));
+        var ro = m.ReturnType == "global::System.Void" ? "void" : SimplifyType(m.ReturnType);
+        var rt = m.ReturnType;
+        var sig = m.IsStatic ? "static " : "";
+        var body2 = body + "    ";
+        var body3 = body + "        ";
+
+        sb.AppendLine();
+        sb.AppendLine($"{body}{m.Accessibility} {sig}partial {ro} {m.MethodName}({pd})");
+        sb.AppendLine($"{body}{{");
+
+        if (m.Parameters.Count > 0)
+        {
+            sb.AppendLine($"{body2}var args = new nint[] {{");
+            for (int i = 0; i < m.Parameters.Count; i++)
+            {
+                var comma = i < m.Parameters.Count - 1 ? "," : "";
+                sb.AppendLine($"{body3}{MarshalParam(m.Parameters[i].Type, $"@{m.Parameters[i].Name}")}{comma}");
+            }
+            sb.AppendLine($"{body2}}};");
+        }
+
+        // runtime_invoke returns value types *boxed*, so primitives have to be unboxed and
+        // dereferenced. Truncating the object pointer (the old `(int)(long)ret`) yields garbage,
+        // and `ret != 0` on a boxed bool is always true.
+        var unbox = UnboxTypeOf(rt);
+
+        if (m.IsStatic)
+        {
+            var argsExpr = m.Parameters.Count > 0 ? "args" : "null";
+            if (rt is "void" or "global::System.Void")
+            {
+                sb.AppendLine($"{body2}var cls = ResolveClass();");
+                sb.AppendLine($"{body2}if (cls == null) return;");
+                sb.AppendLine($"{body2}var method = cls.GetMethod(\"{m.MethodName}\", {m.Parameters.Count});");
+                sb.AppendLine($"{body2}method?.InvokeStatic({argsExpr});");
+            }
+            else
+            {
+                sb.AppendLine($"{body2}var cls = ResolveClass();");
+                sb.AppendLine($"{body2}if (cls == null) return default;");
+                sb.AppendLine($"{body2}var method = cls.GetMethod(\"{m.MethodName}\", {m.Parameters.Count});");
+                sb.AppendLine($"{body2}if (method == null) return default;");
+                if (unbox != null)
+                {
+                    sb.AppendLine($"{body2}return method.InvokeStaticUnbox<{unbox}>({argsExpr});");
+                }
+                else
+                {
+                    sb.AppendLine($"{body2}var ret = method.InvokeStatic({argsExpr});");
+                    sb.AppendLine($"{body2}return {MarshalReturn(rt, "ret")};");
+                }
+            }
+        }
+        else
+        {
+            var argsSuffix = m.Parameters.Count > 0 ? ", args" : "";
+            if (rt is "void" or "global::System.Void")
+            {
+                sb.AppendLine($"{body2}new RuntimeObject(Ptr).InvokeVoid(\"{m.MethodName}\", {m.Parameters.Count}{argsSuffix});");
+            }
+            else if (unbox != null)
+            {
+                sb.AppendLine($"{body2}return new RuntimeObject(Ptr).InvokeUnbox<{unbox}>(\"{m.MethodName}\", {m.Parameters.Count}{argsSuffix});");
+            }
+            else
+            {
+                var call = $"new RuntimeObject(Ptr).Invoke(\"{m.MethodName}\", {m.Parameters.Count}{argsSuffix})";
+                sb.AppendLine($"{body2}var ret = {call};");
+                sb.AppendLine($"{body2}return {MarshalReturn(rt, "ret")};");
+            }
+        }
+
+        sb.AppendLine($"{body}}}");
+    }
+
+    /// <summary>
+    /// The unmanaged type a boxed return should be read back as, or null when the result is a
+    /// reference (object pointer) and should stay raw. nint/nuint stay raw on purpose — they
+    /// stand for object pointers or types the stub could not resolve.
+    /// </summary>
+    private static string? UnboxTypeOf(string type)
+    {
+        return type switch
+        {
+            "global::System.Boolean" or "bool" => "bool",
+            "global::System.Byte" or "byte" => "byte",
+            "global::System.SByte" or "sbyte" => "sbyte",
+            "global::System.Int16" or "short" => "short",
+            "global::System.UInt16" or "ushort" => "ushort",
+            "global::System.Char" or "char" => "char",
+            "global::System.Int32" or "int" => "int",
+            "global::System.UInt32" or "uint" => "uint",
+            "global::System.Int64" or "long" => "long",
+            "global::System.UInt64" or "ulong" => "ulong",
+            "global::System.Single" or "float" => "float",
+            "global::System.Double" or "double" => "double",
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// Wraps a raw object pointer into the declared reference type. Value types never reach
+    /// here — <see cref="UnboxTypeOf"/> routes them through the unboxing invoke instead.
+    /// </summary>
+    private static string MarshalReturn(string type, string expr)
+    {
+        return type switch
+        {
+            "global::System.Void" => "",
+            "global::System.IntPtr" or "nint" => expr,
+            "global::System.UIntPtr" or "nuint" => $"(nuint){expr}",
+            "global::System.String" or "string" => $"new RuntimeString({expr})",
+            _ when type.EndsWith("RuntimeString") => $"new RuntimeString({expr})",
+            _ when type.EndsWith("RuntimeObject?") => $"{expr} != 0 ? new RuntimeObject({expr}) : null",
+            _ when type.EndsWith("RuntimeObject") => $"new RuntimeObject({expr})",
+            _ => $"{expr}",
+        };
+    }
+
+    private static string MarshalParam(string type, string expr)
+    {
+        var st = SimplifyType(type);
+        return type switch
+        {
+            "global::System.IntPtr" or "nint" => expr,
+            "global::System.Int32" or "int" => $"(nint){expr}",
+            "global::System.UInt32" or "uint" => $"(nint)(long){expr}",
+            "global::System.Int64" or "long" => $"(nint){expr}",
+            "global::System.UInt64" or "ulong" => $"(nint)(long){expr}",
+            "global::System.Boolean" or "bool" => $"{expr} ? (nint)1 : 0",
+            "global::System.Byte" or "byte" => $"(nint){expr}",
+            "global::System.SByte" or "sbyte" => $"(nint){expr}",
+            "global::System.Int16" or "short" => $"(nint){expr}",
+            "global::System.UInt16" or "ushort" => $"(nint){expr}",
+            "global::System.Single" or "float" => $"*(nint*)&{expr}",
+            "global::System.Double" or "double" => $"*(nint*)&{expr}",
+            "global::System.String" or "string" => $"RuntimeString.New({expr}).Ptr",
+            _ when type.EndsWith("RuntimeObject") => $"{expr}.Ptr",
+            _ when type.EndsWith("RuntimeString") => $"{expr}.Ptr",
+            _ when type.EndsWith("UnmanagedObject") => $"{expr}.Ptr",
+            _ => $"RuntimeBox.Box<{st}>({expr})",
+        };
+    }
+
+    private static string EscapeString(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    private static string SimplifyType(string type)
+    {
+        if (type == "global::System.IntPtr") return "nint";
+        if (type == "global::System.UIntPtr") return "nuint";
+        if (type == "global::System.Void") return "void";
+        if (type == "global::System.Int32") return "int";
+        if (type == "global::System.UInt32") return "uint";
+        if (type == "global::System.Int64") return "long";
+        if (type == "global::System.UInt64") return "ulong";
+        if (type == "global::System.Boolean") return "bool";
+        if (type == "global::System.Byte") return "byte";
+        if (type == "global::System.SByte") return "sbyte";
+        if (type == "global::System.Int16") return "short";
+        if (type == "global::System.UInt16") return "ushort";
+        if (type == "global::System.Single") return "float";
+        if (type == "global::System.Double") return "double";
+        if (type == "global::System.Char") return "char";
+        if (type == "global::System.String") return "string";
+        if (type.StartsWith("global::")) return type.Substring(8);
+        return type;
+    }
+}

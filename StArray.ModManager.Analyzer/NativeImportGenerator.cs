@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace StArray.ModManager.SourceGenerator;
+namespace StArray.ModManager.Analyzer;
 
 [Generator]
 public class NativeImportGenerator : IIncrementalGenerator

@@ -1,0 +1,60 @@
+# Normalize text files to UTF-8 without BOM and LF line endings.
+# This prevents PowerShell and other tools from corrupting encodings.
+
+* text=auto eol=lf
+
+# Source code
+*.cs          text diff=csharp
+*.csproj      text
+*.slnx        text
+*.props       text
+*.targets     text
+*.json        text
+*.xml         text
+*.yml         text
+*.yaml        text
+*.editorconfig text
+*.cmake       text
+Makefile      text
+*.java        text
+*.kt          text
+
+# Scripts
+*.sh          text eol=lf
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+
+# Docs
+*.md          text diff=markdown
+*.txt         text
+
+# Native code
+*.c           text
+*.h           text
+*.hpp         text
+*.cpp         text
+
+
+# Gradle
+*.gradle      text
+/gradlew      text eol=lf
+
+# Binary / generated
+*.png         binary
+*.jpg         binary
+*.ico         binary
+*.ttf         binary
+*.otf         binary
+*.so          binary
+*.dll         binary
+*.exe         binary
+*.lib         binary
+*.a           binary
+*.obj         binary
+*.pdb         binary
+*.apk         binary
+*.aar         binary
+*.jar         binary
+*.zip         binary
+*.tar         binary
+*.gz          binary

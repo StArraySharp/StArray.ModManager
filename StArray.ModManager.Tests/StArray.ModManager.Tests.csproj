@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -24,7 +24,7 @@
     <ItemGroup>
         <ProjectReference Include="..\StArray.ModManager.Windows\StArray.ModManager.Windows.csproj" />
         <ProjectReference Include="..\StArray.ModManager\StArray.ModManager.csproj" />
-        <ProjectReference Include="..\StArray.ModManager.SourceGenerator\StArray.ModManager.SourceGenerator.csproj"
+        <ProjectReference Include="..\StArray.ModManager.Analyzer\StArray.ModManager.Analyzer.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false" />
     </ItemGroup>

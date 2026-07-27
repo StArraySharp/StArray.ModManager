@@ -47,6 +47,34 @@ public partial class ModManagerUI
         _modManager.ScanMods();
     }
 
+    /// <summary>
+    /// 生成"未托管类型程序集"到 Mods 目录，随后重新扫描以便它立刻出现在列表中。
+    /// </summary>
+    private void GenerateUnmanagedTypeAssembly()
+    {
+        try
+        {
+            var modDir = AssemblyEmitter.GenerateToMods(_config.ModsDirectory);
+            if (modDir == null)
+            {
+                _toastMessage = FontAwesome7.CircleXmark + " " +
+                                L10n.Get("Toast_UnmanagedAsmFailed", L10n.Get("Toast_UnmanagedAsmNoRuntime"));
+                _toastTimer = 5f;
+                return;
+            }
+
+            _modManager.ScanMods();
+            _toastMessage = FontAwesome7.CircleCheck + " " + L10n.Get("Toast_UnmanagedAsmDone", modDir);
+            _toastTimer = 5f;
+        }
+        catch (Exception ex)
+        {
+            _toastMessage = FontAwesome7.CircleXmark + " " + L10n.Get("Toast_UnmanagedAsmFailed", ex.Message);
+            _toastTimer = 5f;
+            Logger.Error(nameof(ModManagerUI), $"GenerateUnmanagedTypeAssembly: {ex}");
+        }
+    }
+
     private void ApplyConfig()
     {
         var io = ImGui.GetIO();
@@ -297,6 +325,12 @@ public partial class ModManagerUI
                         if (ImGui.BeginTabItem(L10n.Get("Tab_Settings")))
                         {
                             ImGui.Text(L10n.Get("Settings_ModsDir") + " " + _config.ModsDirectory);
+                            ImGui.Separator();
+
+                            ImGui.Text(L10n.Get("Settings_UnmanagedAsm"));
+                            ImGui.TextWrapped(L10n.Get("Settings_UnmanagedAsm_Hint"));
+                            if (ImGui.Button($"{FontAwesome7.Cubes} {L10n.Get("Btn_GenUnmanagedAsm")}"))
+                                GenerateUnmanagedTypeAssembly();
                             ImGui.Separator();
 
                             ImGui.Text(L10n.Get("Settings_UiScale"));

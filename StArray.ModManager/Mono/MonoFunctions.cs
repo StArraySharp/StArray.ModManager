@@ -199,6 +199,12 @@ public unsafe class MonoFunctions
     public static bool MonoClassIsEnum(nint klass)
         => Methods.mono_class_is_enum((_MonoClass*)klass) != 0;
 
+    public static nint MonoClassGetElementClass(nint klass)
+        => (nint)Methods.mono_class_get_element_class((_MonoClass*)klass);
+
+    public static nint MonoClassGetNestingType(nint klass)
+        => (nint)Methods.mono_class_get_nesting_type((_MonoClass*)klass);
+
     public static int MonoClassNumFields(nint klass)
         => Methods.mono_class_num_fields((_MonoClass*)klass);
 

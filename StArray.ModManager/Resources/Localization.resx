@@ -29,6 +29,14 @@
     <data name="State_Error" xml:space="preserve"><value>错误</value></data>
     <data name="State_NotLoaded" xml:space="preserve"><value>未加载</value></data>
     <data name="Settings_ModsDir" xml:space="preserve"><value>Mods 目录:</value></data>
+    <data name="Inspector_HotkeyPress" xml:space="preserve"><value>请按键… (Esc 取消, Backspace 解绑)</value></data>
+    <data name="Inspector_ListAdd" xml:space="preserve"><value>添加</value></data>
+    <data name="Settings_UnmanagedAsm" xml:space="preserve"><value>未托管类型程序集:</value></data>
+    <data name="Settings_UnmanagedAsm_Hint" xml:space="preserve"><value>为游戏的未托管类型生成托管存根，作为一个 Mod 放入 Mods 目录，供其他 Mod 引用。</value></data>
+    <data name="Btn_GenUnmanagedAsm" xml:space="preserve"><value>生成到 Mods 目录</value></data>
+    <data name="Toast_UnmanagedAsmDone" xml:space="preserve"><value>未托管类型程序集已生成: {0}</value></data>
+    <data name="Toast_UnmanagedAsmFailed" xml:space="preserve"><value>生成失败: {0}</value></data>
+    <data name="Toast_UnmanagedAsmNoRuntime" xml:space="preserve"><value>未检测到运行时后端</value></data>
     <data name="Settings_UiScale" xml:space="preserve"><value>界面缩放:</value></data>
     <data name="Settings_Shortcuts" xml:space="preserve"><value>快捷键:</value></data>
     <data name="Settings_Shortcut_Scan" xml:space="preserve"><value>Ctrl+R - 扫描 Mods</value></data>

@@ -68,6 +68,42 @@ public class ModLoader
     }
 
     /// <summary>
+    /// 找出程序集里的 <see cref="IModPlugin"/> 实现类型。
+    /// 优先读 <see cref="ModEntryPointAttribute"/>：生成的存根程序集有成千上万个类型，
+    /// 全量扫描既慢、又会因其中任何一个类型加载失败而整体抛出。
+    /// 没有该标注时回退到扫描，并容忍部分类型加载失败。
+    /// </summary>
+    private static Type? ResolvePluginType(Assembly assembly)
+    {
+        try
+        {
+            if (assembly.GetCustomAttribute<ModEntryPointAttribute>()?.PluginType is { } declared &&
+                IsPluginType(declared))
+                return declared;
+        }
+        catch (Exception ex)
+        {
+            // 标注指向的类型解析不了就走扫描，不致命
+            Logger.Warn(nameof(ModLoader), $"ModEntryPoint attribute unusable: {ex.Message}");
+        }
+
+        Type?[] types;
+        try
+        {
+            types = assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            types = ex.Types;
+        }
+
+        return types.FirstOrDefault(t => t != null && IsPluginType(t));
+    }
+
+    private static bool IsPluginType(Type t) =>
+        typeof(IModPlugin).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract;
+
+    /// <summary>
     /// 从文件夹发现 Mod 信息
     /// </summary>
     private ModEntry? DiscoverMod(string folderPath)
@@ -85,10 +121,7 @@ public class ModLoader
         {
             var assembly = Assembly.LoadFrom(entryDll);
 
-            // 扫描实现 IModPlugin 的类型
-            var pluginType = assembly.GetTypes()
-                .FirstOrDefault(t => typeof(IModPlugin).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
+            var pluginType = ResolvePluginType(assembly);
             if (pluginType == null) return null;
 
             // 实例化以读取元数据
@@ -150,9 +183,7 @@ public class ModLoader
             {
                 var assembly = Assembly.LoadFrom(mod.EntryPoint);
 
-                var pluginType = assembly.GetTypes()
-                    .FirstOrDefault(t => typeof(IModPlugin).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
+                var pluginType = ResolvePluginType(assembly);
                 if (pluginType != null)
                 {
                     var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;

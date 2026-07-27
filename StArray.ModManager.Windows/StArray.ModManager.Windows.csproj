@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\StArray.ModManager\StArray.ModManager.csproj" />
-    <ProjectReference Include="..\StArray.ModManager.SourceGenerator\StArray.ModManager.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\StArray.ModManager.Analyzer\StArray.ModManager.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

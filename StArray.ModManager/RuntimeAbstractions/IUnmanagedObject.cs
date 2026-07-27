@@ -1,4 +1,4 @@
-﻿namespace StArray.ModManager.RuntimeAbstractions;
+namespace StArray.ModManager.RuntimeAbstractions;
 
 /// <summary>
 /// 原生托管对象基类 —— 强制子类实现 <c>nint Ptr</c> 属性并通过构造函数传入指针。

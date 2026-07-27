@@ -26,6 +26,14 @@
     <data name="State_Error" xml:space="preserve"><value>Error</value></data>
     <data name="State_NotLoaded" xml:space="preserve"><value>Not Loaded</value></data>
     <data name="Settings_ModsDir" xml:space="preserve"><value>Mods Directory:</value></data>
+    <data name="Inspector_HotkeyPress" xml:space="preserve"><value>Press a key… (Esc cancel, Backspace clear)</value></data>
+    <data name="Inspector_ListAdd" xml:space="preserve"><value>Add</value></data>
+    <data name="Settings_UnmanagedAsm" xml:space="preserve"><value>Unmanaged Type Assembly:</value></data>
+    <data name="Settings_UnmanagedAsm_Hint" xml:space="preserve"><value>Generates managed stubs for the game's unmanaged types as a mod in the Mods folder, so other mods can reference them.</value></data>
+    <data name="Btn_GenUnmanagedAsm" xml:space="preserve"><value>Generate into Mods Folder</value></data>
+    <data name="Toast_UnmanagedAsmDone" xml:space="preserve"><value>Unmanaged Type Assembly generated: {0}</value></data>
+    <data name="Toast_UnmanagedAsmFailed" xml:space="preserve"><value>Generation failed: {0}</value></data>
+    <data name="Toast_UnmanagedAsmNoRuntime" xml:space="preserve"><value>no runtime backend detected</value></data>
     <data name="Settings_UiScale" xml:space="preserve"><value>UI Scale:</value></data>
     <data name="Settings_Shortcuts" xml:space="preserve"><value>Shortcuts:</value></data>
     <data name="Settings_Shortcut_Scan" xml:space="preserve"><value>Ctrl+R - Scan Mods</value></data>
