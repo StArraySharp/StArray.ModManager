@@ -34,10 +34,16 @@ public readonly unsafe struct RuntimeArray
     {
         get
         {
-            if (RuntimeManager.IsIl2Cpp) return Il2CppFunctions.il2cpp_object_unbox(Ptr);
+            if (RuntimeManager.IsIl2Cpp) return GetIl2CppDataPtr(Ptr);
             if (RuntimeManager.IsMono) return MonoFunctions.MonoObjectUnbox(Ptr);
             return 0;
         }
+    }
+
+    internal static nint GetIl2CppDataPtr(nint array)
+    {
+        var unboxed = Il2CppRuntimeApi.Current.ObjectUnbox(array);
+        return unboxed == 0 ? 0 : unboxed + nint.Size * 2;
     }
 
     /// <summary>按索引读取元素（nint = 对象引用或值类型数据指针）</summary>
@@ -105,7 +111,7 @@ public readonly unsafe struct RuntimeArray<T> where T : unmanaged
     {
         get
         {
-            if (RuntimeManager.IsIl2Cpp) return Il2CppFunctions.il2cpp_object_unbox(Ptr) + nint.Size * 2;
+            if (RuntimeManager.IsIl2Cpp) return RuntimeArray.GetIl2CppDataPtr(Ptr);
             if (RuntimeManager.IsMono) return Ptr + nint.Size;
             return 0;
         }

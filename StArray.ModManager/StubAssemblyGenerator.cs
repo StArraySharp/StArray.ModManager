@@ -851,7 +851,7 @@ public static unsafe class StubAssemblyGenerator
         }
     }
 
-    private static string MapType(string runtimeTypeName)
+    internal static string MapType(string runtimeTypeName)
     {
         if (string.IsNullOrEmpty(runtimeTypeName)) return "nint";
         if (TypeMap.TryGetValue(runtimeTypeName, out var mapped)) return mapped;
@@ -870,7 +870,7 @@ public static unsafe class StubAssemblyGenerator
         return type;
     }
 
-    private static string SanitizeIdentifier(string name)
+    internal static string SanitizeIdentifier(string name)
     {
         if (string.IsNullOrEmpty(name)) return "_";
 
@@ -891,7 +891,7 @@ public static unsafe class StubAssemblyGenerator
         return result;
     }
 
-    private static string SanitizeNamespace(string ns)
+    internal static string SanitizeNamespace(string ns)
     {
         if (string.IsNullOrEmpty(ns)) return "";
         var parts = ns.Split('.');
@@ -900,7 +900,7 @@ public static unsafe class StubAssemblyGenerator
         return string.Join(".", parts.Where(p => p.Length > 0));
     }
 
-    private static string EscapeString(string s)
+    internal static string EscapeString(string s)
     {
         return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }

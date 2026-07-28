@@ -33,9 +33,7 @@ public readonly unsafe struct RuntimeObject
         {
             var method = Il2CppFunctions.il2cpp_class_get_method_from_name(klass, methodName, paramCount);
             if (method == 0) return 0;
-            nint exc = 0;
-            fixed (nint* p = args)
-                return Il2CppFunctions.il2cpp_runtime_invoke(method, Ptr, (void**)p, ref exc);
+            return new Il2CppMethod(method).Invoke(Ptr, args);
         }
 
         if (RuntimeManager.IsMono)
@@ -79,8 +77,7 @@ public readonly unsafe struct RuntimeObject
         {
             var field = Il2CppFunctions.il2cpp_class_get_field_from_name(klass, fieldName);
             if (field == 0) return default;
-            var offset = Il2CppFunctions.il2cpp_field_get_offset(field);
-            return *(T*)(Ptr + offset);
+            return new Il2CppField(field).GetValue<T>(Ptr);
         }
 
         if (RuntimeManager.IsMono)
@@ -103,8 +100,7 @@ public readonly unsafe struct RuntimeObject
         {
             var field = Il2CppFunctions.il2cpp_class_get_field_from_name(klass, fieldName);
             if (field == 0) return;
-            var offset = Il2CppFunctions.il2cpp_field_get_offset(field);
-            *(T*)(Ptr + offset) = value;
+            new Il2CppField(field).SetValue(Ptr, value);
         }
 
         if (RuntimeManager.IsMono)
