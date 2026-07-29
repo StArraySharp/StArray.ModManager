@@ -22,9 +22,9 @@ public static class RuntimeManager
     /// <summary>自动检测当前进程加载了哪个运行时 DLL</summary>
     public static RuntimeBackend Detect()
     {
+        Backend = RuntimeBackend.None;
         if (OperatingSystem.IsWindows())
         {
-            Backend = RuntimeBackend.None;
             if (File.Exists(Path.Combine(AppContext.BaseDirectory,"..","..","GameAssembly.dll")))
             {
                 Backend = RuntimeBackend.Il2Cpp;
@@ -36,23 +36,19 @@ public static class RuntimeManager
         }
         else if (OperatingSystem.IsAndroid())
         {
-            if (dlopen("libmono.so", RTLD_NOLOAD) != IntPtr.Zero ||
-                dlopen("libmonobdwgc-2.0.so", RTLD_NOLOAD) != IntPtr.Zero)
+            if (IsUnixLibraryLoaded("libmono.so") ||
+                IsUnixLibraryLoaded("libmonobdwgc-2.0.so"))
                 Backend = RuntimeBackend.Mono;
-            else if (dlopen("libil2cpp.so", RTLD_NOLOAD) != IntPtr.Zero)
+            else if (IsUnixLibraryLoaded("libil2cpp.so"))
                 Backend = RuntimeBackend.Il2Cpp;
         }
         else if (OperatingSystem.IsLinux())
         {
-            if (dlopen("libmono-2.0.so.1", RTLD_NOLOAD) != IntPtr.Zero ||
-                dlopen("libmono.so", RTLD_NOLOAD) != IntPtr.Zero)
+            if (IsUnixLibraryLoaded("libmono-2.0.so.1") ||
+                IsUnixLibraryLoaded("libmono.so"))
                 Backend = RuntimeBackend.Mono;
-            else if (dlopen("libil2cpp.so", RTLD_NOLOAD) != IntPtr.Zero)
+            else if (IsUnixLibraryLoaded("libil2cpp.so"))
                 Backend = RuntimeBackend.Il2Cpp;
-        }
-        else
-        {
-            Backend = RuntimeBackend.None;
         }
         return Backend;
     }
@@ -82,8 +78,31 @@ public static class RuntimeManager
     [DllImport("libdl", EntryPoint = "dlopen")]
     private static extern IntPtr dlopen(string filename, int flags);
 
-    /// <summary>dlopen 标志：仅检查是否已加载，不实际加载</summary>
-    private const int RTLD_NOLOAD = 0x0002;
+    [DllImport("libdl", EntryPoint = "dlclose")]
+    private static extern int dlclose(IntPtr handle);
+
+    internal const int RtldNow = 0x0002;
+    internal const int RtldNoLoad = 0x0004;
+
+    private static bool IsUnixLibraryLoaded(string filename)
+        => ProbeUnixLibrary(filename, dlopen, handle => _ = dlclose(handle));
+
+    internal static bool ProbeUnixLibrary(
+        string filename,
+        Func<string, int, nint> open,
+        Action<nint> close)
+    {
+        var handle = open(filename, RtldNow | RtldNoLoad);
+        if (handle == 0) return false;
+        try
+        {
+            return true;
+        }
+        finally
+        {
+            close(handle);
+        }
+    }
 }
 
 /// <summary>运行时后端类型</summary>

@@ -27,4 +27,8 @@
     <EmbeddedResource Include="Resources\NotoSansCJK-Regular.otf" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="StArray.ModManager.Tests" />
+  </ItemGroup>
+
 </Project>

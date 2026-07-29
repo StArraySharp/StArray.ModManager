@@ -15,11 +15,20 @@ public unsafe class Il2CppAssembly : IRuntimeAssembly
 
     public Il2CppClass? GetClass(string namespaze, string name)
     {
-        Il2CppDomain.Current.ThreadAttach();
-        var img = Il2CppFunctions.il2cpp_assembly_get_image(Ptr);
-        var k = Il2CppFunctions.il2cpp_class_from_name(img, namespaze, name.Replace('+', '/'));
-        Il2CppDomain.Current.ThreadDetach();
-        return k != 0 ? new Il2CppClass(k) : null;
+        var domain = Il2CppDomain.Current;
+        if (domain == null) return null;
+
+        domain.ThreadAttach();
+        try
+        {
+            var img = Il2CppFunctions.il2cpp_assembly_get_image(Ptr);
+            var k = Il2CppFunctions.il2cpp_class_from_name(img, namespaze, name.Replace('+', '/'));
+            return k != 0 ? new Il2CppClass(k) : null;
+        }
+        finally
+        {
+            domain.ThreadDetach();
+        }
     }
 
     IRuntimeClass? IRuntimeAssembly.GetClass(string namespaze, string name)
@@ -162,9 +171,10 @@ public unsafe class Il2CppMethod : IRuntimeMethod
 
     public unsafe nint Invoke(nint obj, nint[]? args = null)
     {
-        nint exc = 0;
-        fixed (nint* p = args)
-            return Il2CppFunctions.il2cpp_runtime_invoke(Ptr, obj, (void**)p, ref exc);
+        var result = Il2CppRuntimeApi.Current.RuntimeInvoke(Ptr, obj, args, out var exception);
+        if (exception != 0)
+            throw Il2CppInvocationException.Create(exception, $"IL2CPP method 0x{Ptr:X} invocation failed");
+        return result;
     }
 
     public nint InvokeStatic(nint[]? args = null)
@@ -199,7 +209,7 @@ public unsafe class Il2CppField : IRuntimeField
 
     public string Name => Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_field_get_name(Ptr)) ?? "";
     public uint Offset => Il2CppFunctions.il2cpp_field_get_offset(Ptr);
-    public bool IsStatic => (Il2CppFunctions.il2cpp_field_get_flags(Ptr) & 0x10) != 0;
+    public bool IsStatic => (Il2CppRuntimeApi.Current.FieldGetFlags(Ptr) & 0x10) != 0;
 
     public string TypeName
     {
@@ -211,28 +221,27 @@ public unsafe class Il2CppField : IRuntimeField
     }
 
     public unsafe T GetValue<T>(nint obj) where T : unmanaged
-    {
-        if (IsStatic)
-        {
-            T val = default;
-            Il2CppFunctions.il2cpp_field_static_get_value(Ptr, &val);
-            return val;
-        }
-        return *(T*)(obj + Offset);
-    }
+        => Il2CppRuntimeApi.Current.GetFieldValue<T>(obj, Ptr, IsStatic);
 
     public unsafe void SetValue<T>(nint obj, T value) where T : unmanaged
     {
-        if (IsStatic)
-            Il2CppFunctions.il2cpp_field_static_set_value(Ptr, &value);
-        else
-            *(T*)(obj + Offset) = value;
+        var api = Il2CppRuntimeApi.Current;
+        var isStatic = IsStatic;
+        if (!isStatic && api.IsReferenceField(Ptr))
+        {
+            if (sizeof(T) != nint.Size)
+                throw new ArgumentException("An IL2CPP reference field requires a pointer-sized value.", nameof(value));
+            api.SetObjectFieldValue(obj, Ptr, *(nint*)&value);
+            return;
+        }
+
+        api.SetFieldValue(obj, Ptr, isStatic, value);
     }
 
     public nint GetObjectValue(nint obj) => Il2CppFunctions.il2cpp_field_get_value_object(Ptr, obj);
 }
 
-/// 自定义类工厂 Native il2cpp_class_new  
+/// 自定义类工厂 Native il2cpp_class_new
 public static class ClassFactory
 {
     [DllImport("modmanager", EntryPoint = "modmanager_class_create")]

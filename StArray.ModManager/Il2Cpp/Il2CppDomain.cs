@@ -4,6 +4,14 @@ namespace StArray.ModManager.Il2Cpp;
 
 public unsafe class Il2CppDomain : IAppDomain
 {
+    private static readonly object CurrentLock = new();
+    private static Il2CppDomain? _current;
+
+    [ThreadStatic] private static nint _attachedThread;
+    [ThreadStatic] private static int _attachmentDepth;
+    [ThreadStatic] private static bool _ownsAttachment;
+    [ThreadStatic] private static IIl2CppRuntimeApi? _attachmentApi;
+
     public nint Ptr { get; }
     public bool IsValid => Ptr != 0;
 
@@ -13,15 +21,32 @@ public unsafe class Il2CppDomain : IAppDomain
 
     private static void OnAssemblyLoad(string name, nint asm) => AssemblyLoad?.Invoke(name, asm);
 
-    private nint _thread;
-
     public static Il2CppDomain? Current
     {
         get
         {
-            var ptr = Il2CppFunctions.il2cpp_domain_get();
-            return ptr != 0 ? new Il2CppDomain(ptr) : null;
+            var current = Volatile.Read(ref _current);
+            if (current != null) return current;
+
+            lock (CurrentLock)
+            {
+                if (_current != null) return _current;
+                var ptr = Il2CppRuntimeApi.Current.DomainGet();
+                if (ptr == 0) return null;
+                _current = new Il2CppDomain(ptr);
+                return _current;
+            }
         }
+    }
+
+    internal static void ResetCachedState()
+    {
+        lock (CurrentLock)
+            _current = null;
+        _attachedThread = 0;
+        _attachmentDepth = 0;
+        _ownsAttachment = false;
+        _attachmentApi = null;
     }
 
     public IReadOnlyList<IRuntimeAssembly> GetAssemblies()
@@ -68,14 +93,46 @@ public unsafe class Il2CppDomain : IAppDomain
 
     public void ThreadAttach()
     {
-        if (_thread != 0) return;
-        _thread = Il2CppFunctions.il2cpp_thread_attach(Ptr);
+        if (_attachmentDepth > 0)
+        {
+            _attachmentDepth++;
+            return;
+        }
+
+        var api = Il2CppRuntimeApi.Current;
+        var currentThread = api.ThreadCurrent();
+        if (currentThread != 0)
+        {
+            _attachedThread = currentThread;
+            _attachmentDepth = 1;
+            _ownsAttachment = false;
+            _attachmentApi = api;
+            return;
+        }
+
+        var attachedThread = api.ThreadAttach(Ptr);
+        if (attachedThread == 0)
+            throw new InvalidOperationException("IL2CPP rejected thread attachment.");
+
+        _attachedThread = attachedThread;
+        _attachmentDepth = 1;
+        _ownsAttachment = true;
+        _attachmentApi = api;
     }
 
     public void ThreadDetach()
     {
-        if (_thread == 0) return;
-        Il2CppFunctions.il2cpp_thread_detach(_thread);
-        _thread = 0;
+        if (_attachmentDepth == 0) return;
+        if (--_attachmentDepth > 0) return;
+
+        var thread = _attachedThread;
+        var ownsAttachment = _ownsAttachment;
+        var api = _attachmentApi;
+        _attachedThread = 0;
+        _ownsAttachment = false;
+        _attachmentApi = null;
+
+        if (ownsAttachment && thread != 0)
+            api!.ThreadDetach(thread);
     }
 }
