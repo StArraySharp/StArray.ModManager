@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using ImGuiNET;
 using StArray.ModManager.Android.Native;
 using StArray.ModManager.Manager;
+using StArray.ModManager.Native;
 using StArray.ModManager.UI;
 
 namespace StArray.ModManager.Android.UI;
@@ -159,7 +160,7 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
     private bool InstallInstance()
     {
         // 加载 libvulkan.so
-        var vulkanLib = DL.dlopen("libvulkan.so", DL.Flags.RTLD_GLOBAL | DL.Flags.RTLD_NOW);
+        var vulkanLib = DL.Open("libvulkan.so", DL.RTLDFlags.RTLD_GLOBAL | DL.RTLDFlags.RTLD_NOW);
         if (vulkanLib == IntPtr.Zero)
         {
             Logger.Error(nameof(ImGuiVulkanRenderer), "Failed to load libvulkan.so");
@@ -238,17 +239,17 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
 
     private bool ResolveVulkanFunctions(IntPtr vulkanLib)
     {
-        _pfnCreateCommandPool = DL.dlsym(vulkanLib, "vkCreateCommandPool");
-        _pfnAllocateCommandBuffers = DL.dlsym(vulkanLib, "vkAllocateCommandBuffers");
-        _pfnBeginCommandBuffer = DL.dlsym(vulkanLib, "vkBeginCommandBuffer");
-        _pfnEndCommandBuffer = DL.dlsym(vulkanLib, "vkEndCommandBuffer");
-        _pfnQueueSubmit = DL.dlsym(vulkanLib, "vkQueueSubmit");
-        _pfnQueueWaitIdle = DL.dlsym(vulkanLib, "vkQueueWaitIdle");
-        _pfnResetCommandPool = DL.dlsym(vulkanLib, "vkResetCommandPool");
-        _pfnCreateFence = DL.dlsym(vulkanLib, "vkCreateFence");
-        _pfnWaitForFences = DL.dlsym(vulkanLib, "vkWaitForFences");
-        _pfnResetFences = DL.dlsym(vulkanLib, "vkResetFences");
-        _pfnDestroyFence = DL.dlsym(vulkanLib, "vkDestroyFence");
+        _pfnCreateCommandPool = DL.Symbol(vulkanLib, "vkCreateCommandPool");
+        _pfnAllocateCommandBuffers = DL.Symbol(vulkanLib, "vkAllocateCommandBuffers");
+        _pfnBeginCommandBuffer = DL.Symbol(vulkanLib, "vkBeginCommandBuffer");
+        _pfnEndCommandBuffer = DL.Symbol(vulkanLib, "vkEndCommandBuffer");
+        _pfnQueueSubmit = DL.Symbol(vulkanLib, "vkQueueSubmit");
+        _pfnQueueWaitIdle = DL.Symbol(vulkanLib, "vkQueueWaitIdle");
+        _pfnResetCommandPool = DL.Symbol(vulkanLib, "vkResetCommandPool");
+        _pfnCreateFence = DL.Symbol(vulkanLib, "vkCreateFence");
+        _pfnWaitForFences = DL.Symbol(vulkanLib, "vkWaitForFences");
+        _pfnResetFences = DL.Symbol(vulkanLib, "vkResetFences");
+        _pfnDestroyFence = DL.Symbol(vulkanLib, "vkDestroyFence");
 
         if (_pfnCreateCommandPool == IntPtr.Zero ||
             _pfnAllocateCommandBuffers == IntPtr.Zero ||

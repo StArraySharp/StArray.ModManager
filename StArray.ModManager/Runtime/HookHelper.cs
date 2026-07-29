@@ -42,6 +42,18 @@ public static class HookHelper
         return GetFunctionFallback(library, name);
     }
 
+    /// <summary>获取库基址 + RVA 对应的绝对地址</summary>
+    public static nint GetFunctionRVA(string library, long rva)
+    {
+        if (Instance != null)
+        {
+            var addr = Instance.GetFunctionRVA(library, rva);
+            if (addr != nint.Zero) return addr;
+        }
+
+        return GetFunctionRVAFallback(library, rva);
+    }
+
     /// <summary>降级路径（无 Instance 时使用）</summary>
     public static nint GetFunctionFallback(string library, string name)
     {
@@ -67,6 +79,42 @@ public static class HookHelper
         // 4) 回退标准 TryLoad
         if (NativeLibrary.TryLoad(library, out lib))
             return NativeLibrary.GetExport(lib, name);
+        return nint.Zero;
+    }
+
+    /// <summary>降级 RVA 解析路径</summary>
+    public static nint GetFunctionRVAFallback(string library, long rva)
+    {
+        var dllName = library.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+            ? library : library + ".dll";
+
+        var mod = GetModuleHandle(dllName);
+        if (mod != nint.Zero)
+            return mod + (nint)rva;
+
+        var localPath = Path.Combine(AppContext.BaseDirectory, dllName);
+        if (File.Exists(localPath) && NativeLibrary.TryLoad(localPath, out _))
+        {
+            mod = GetModuleHandle(dllName);
+            if (mod != nint.Zero)
+                return mod + (nint)rva;
+        }
+
+        var dllsPath = Path.Combine(AppContext.BaseDirectory, "dlls", dllName);
+        if (File.Exists(dllsPath) && NativeLibrary.TryLoad(dllsPath, out _))
+        {
+            mod = GetModuleHandle(dllName);
+            if (mod != nint.Zero)
+                return mod + (nint)rva;
+        }
+
+        if (NativeLibrary.TryLoad(library, out _))
+        {
+            mod = GetModuleHandle(dllName);
+            if (mod != nint.Zero)
+                return mod + (nint)rva;
+        }
+
         return nint.Zero;
     }
 }

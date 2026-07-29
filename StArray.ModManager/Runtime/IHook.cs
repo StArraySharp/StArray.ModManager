@@ -11,6 +11,12 @@ public interface IHook
     /// <summary>卸载 target 上的 hook</summary>
     bool Unhook(nint target);
 
-    /// <summary>从指定库获取导出函数地址</summary>
+        /// <summary>从指定库获取导出函数地址</summary>
     nint GetFunction(string library, string name);
+
+    /// <summary>从指定库计算 RVA（相对虚拟地址）对应的绝对地址</summary>
+    nint GetFunctionRVA(string library, long rva)
+    {
+        return nint.Zero;
+    }
 }

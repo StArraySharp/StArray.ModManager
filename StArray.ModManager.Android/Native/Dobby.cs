@@ -81,7 +81,9 @@ public static class Dobby
     private static extern nint _GetVersionRaw();
     
     public static IntPtr SymbolResolver(string imageName, string symbolName){
-        return _SymbolResolver(imageName, symbolName);
+        var handle = _SymbolResolver(imageName, symbolName);
+        Logger.Error(nameof(SymbolResolver), $"Resolving {imageName}, {symbolName} = {handle}");
+        return handle;
     }
 
     /// <summary>获取 Dobby 版本字符串。</summary>

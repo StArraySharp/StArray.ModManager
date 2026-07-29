@@ -7,13 +7,16 @@ namespace StArray.ModManager.Hooks
     {
         public string Library { get; }
         public string Symbol { get; }
-        public ulong Address { get; }
+        public long RVA { get; }
+        public string ResolverMethod { get; }
         public CallingConvention Convention { get; set; }
         public bool Enabled { get; set; } = true;
         public NativeHookAttribute(string library, string symbol)
         { Library = library; Symbol = symbol; Convention = CallingConvention.StdCall; }
-        public NativeHookAttribute(ulong address)
-        { Address = address; Convention = CallingConvention.StdCall; }
+        public NativeHookAttribute(string library, long rva)
+        { Library = library; RVA = rva; Convention = CallingConvention.StdCall; }
+        public NativeHookAttribute(string symbolResolver)
+        { ResolverMethod = symbolResolver; Convention = CallingConvention.StdCall; }
     }
 
     /// <summary>

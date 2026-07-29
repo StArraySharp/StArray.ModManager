@@ -1,4 +1,5 @@
 using OpenTK;
+using StArray.ModManager.Native;
 
 namespace StArray.ModManager.Android.Native;
 
@@ -8,11 +9,11 @@ public class GLESBindingsContext : IBindingsContext
     
     public GLESBindingsContext()
     {
-        _libHandle = DL.dlopen("libGLESv3.so", DL.Flags.RTLD_LAZY);
+        _libHandle = DL.Open("libGLESv3.so", DL.RTLDFlags.RTLD_LAZY);
     }
 
     public IntPtr GetProcAddress(string procName)
     {
-        return DL.dlsym(_libHandle, procName);
+        return DL.Symbol(_libHandle, procName);
     }
 }

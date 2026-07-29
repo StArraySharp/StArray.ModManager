@@ -102,6 +102,34 @@ public class MinHook : IHook
         return ok;
     }
 
+    public nint GetFunctionRVA(string library, long rva)
+    {
+        var dllName = library.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? library : library + ".dll";
+        var mod = Win32Native.GetModuleHandleW(dllName);
+        if (mod != nint.Zero)
+            return mod + (nint)rva;
+
+        var localPath = Path.Combine(AppContext.BaseDirectory, dllName);
+        if (File.Exists(localPath))
+        {
+            NativeLibrary.Load(localPath);
+            mod = Win32Native.GetModuleHandleW(dllName);
+            if (mod != nint.Zero)
+                return mod + (nint)rva;
+        }
+
+        var dllsPath = Path.Combine(AppContext.BaseDirectory, "dlls", dllName);
+        if (File.Exists(dllsPath))
+        {
+            NativeLibrary.Load(dllsPath);
+            mod = Win32Native.GetModuleHandleW(dllName);
+            if (mod != nint.Zero)
+                return mod + (nint)rva;
+        }
+
+        return nint.Zero;
+    }
+
     public nint GetFunction(string library, string name)
     {
         var dllName = library.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? library : library + ".dll";

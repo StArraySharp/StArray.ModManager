@@ -1,8 +1,8 @@
 {
-  "version": "1.0.4",
-  "versionCode": 7,
-  "manager": "https://github.com/StArraySharp/StArray.ModManager/releases/download/1.0.4/modmanager.zip",
-  "sha256": "0d4c908415e3587895955e1409db5c23540b5ce560cc520fdd73641e334e3315",
+  "version": "1.0.5",
+  "versionCode": 8,
+  "manager": "https://github.com/StArraySharp/StArray.ModManager/releases/download/1.0.5/modmanager.zip",
+  "sha256": "5ed3af90040e4f69e1bf03a007120c042e385e795c97686f8b2ad40c66f7cbbe",
   "entryAssembly": "StArray.ModManager.Android.dll",
   "entryMethod": "StArray.ModManager.Android.Managed::Entry"
 }

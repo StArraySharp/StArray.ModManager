@@ -72,4 +72,11 @@ internal static class Diagnostics
         "实例方法 Hook 的首个参数应为 nint（this 指针）",
         "方法 '{0}' 的首个参数是 '{1}'；被 hook 的实例方法在 native 侧首参为 this 指针，通常应声明为 nint",
         Category, DiagnosticSeverity.Info, isEnabledByDefault: true);
+
+    /// <summary>Resolver 方法不存在</summary>
+    public static readonly DiagnosticDescriptor ResolverMethodNotFound = new(
+        "SAMM010",
+        "Resolver 方法不存在",
+        "方法 '{0}' 中指定的 resolver 方法 '{1}' 不存在或签名不匹配（需要 static nint MethodName()）",
+        Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 }

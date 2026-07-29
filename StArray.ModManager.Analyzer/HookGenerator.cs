@@ -37,12 +37,16 @@ public class HookGenerator : IIncrementalGenerator
     {
         public string AttrType { get; set; }
         public string ContainingType { get; set; }
+        public string TypeAccessibility { get; set; }
         public string MethodName { get; set; }
         public string ReturnType { get; set; }
         public ImmutableArray<(string Type, string Name)> Parameters { get; set; }
         public ImmutableArray<string> CtorArgs { get; set; }
         public ImmutableArray<(string Key, string Value)> NamedArgs { get; set; }
         public bool HasUnmanagedCallersOnly { get; set; }
+        public bool ResolverMethodExists { get; set; } = true;
+        public string ResolverCallExpression { get; set; }
+        public Microsoft.CodeAnalysis.Location Location { get; set; }
     }
 
     private static HookInfo? GetHookInfo(GeneratorSyntaxContext ctx)
@@ -77,16 +81,34 @@ public class HookGenerator : IIncrementalGenerator
             var uco = sym.GetAttributes().Any(a =>
                 a.AttributeClass?.ToDisplayString() == "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute");
 
+            var accessibility = sym.ContainingType.DeclaredAccessibility;
+            var typeAcc = accessibility switch
+            {
+                Accessibility.Public => "public",
+                Accessibility.Internal => "internal",
+                _ => "internal",
+            };
+
+            var resolverCallExpr = "";
+            if (attrType == "NativeHook" && ca.Count == 1 && ca[0].StartsWith("\""))
+            {
+                var rawName = ca[0].Trim('"');
+                resolverCallExpr = rawName.Replace("::", ".");
+            }
+
             return new HookInfo
             {
                 AttrType = attrType,
                 ContainingType = ct,
+                TypeAccessibility = typeAcc,
                 MethodName = sym.Name,
                 ReturnType = rt,
                 Parameters = pl.ToImmutable(),
                 CtorArgs = ca.ToImmutable(),
                 NamedArgs = na.ToImmutable(),
                 HasUnmanagedCallersOnly = uco,
+                ResolverCallExpression = resolverCallExpr,
+                Location = method.GetLocation(),
             };
         }
         return null;
@@ -120,8 +142,30 @@ public class HookGenerator : IIncrementalGenerator
     {
         if (hooks.Length == 0) return;
 
+        foreach (var h in hooks)
+        {
+            if (string.IsNullOrEmpty(h.ResolverCallExpression))
+                continue;
+
+            var methodName = h.ResolverCallExpression.Contains('.')
+                ? h.ResolverCallExpression.Substring(h.ResolverCallExpression.LastIndexOf('.') + 1)
+                : h.ResolverCallExpression;
+
+            var found = compilation.GetSymbolsWithName(methodName, SymbolFilter.Member)
+                .Any(m => m is IMethodSymbol ms &&
+                    ms.Name == methodName &&
+                    ms.IsStatic &&
+                    ms.Parameters.Length == 0 &&
+                    ms.ReturnType.SpecialType == SpecialType.System_IntPtr);
+
+            if (!found)
+                ctx.ReportDiagnostic(Diagnostic.Create(
+                    Diagnostics.ResolverMethodNotFound, h.Location, h.MethodName, h.ResolverCallExpression));
+        }
+
         foreach (var group in hooks.GroupBy(h => h.ContainingType))
         {
+            var first = group.First();
             var ns = ExtractNamespace(group.Key);
             var cn = ExtractClassName(group.Key);
             var sb = new StringBuilder();
@@ -130,7 +174,7 @@ public class HookGenerator : IIncrementalGenerator
             sb.AppendLine("#nullable enable");
             sb.AppendLine($"namespace {ns ?? "__Hooks"}");
             sb.AppendLine("{");
-            sb.AppendLine($"    public unsafe partial class {cn}");
+            sb.AppendLine($"    {first.TypeAccessibility} unsafe partial class {cn}");
             sb.AppendLine("    {");
 
             foreach (var h in group)
@@ -160,9 +204,18 @@ public class HookGenerator : IIncrementalGenerator
                 sb.AppendLine("        {");
                 if (h.AttrType == "NativeHook")
                 {
-                    bool isAddr = h.CtorArgs.Length == 1 && !h.CtorArgs[0].StartsWith("\"");
-                    if (isAddr)
-                        sb.AppendLine($"            var t = (nint){h.CtorArgs[0]};");
+                    bool isRva = h.CtorArgs.Length == 2 && h.CtorArgs[0].StartsWith("\"") && !h.CtorArgs[1].StartsWith("\"");
+                    bool isResolver = h.CtorArgs.Length == 1 && h.CtorArgs[0].StartsWith("\"");
+                    if (isResolver)
+                    {
+                        sb.AppendLine($"            var t = {h.ResolverCallExpression}();");
+                    }
+                    else if (isRva)
+                    {
+                        var l = h.CtorArgs[0];
+                        var r = h.CtorArgs[1];
+                        sb.AppendLine($"            var t = global::StArray.ModManager.Runtime.HookHelper.GetFunctionRVA({l}, (long){r});");
+                    }
                     else
                     {
                         var l = h.CtorArgs.Length > 0 ? h.CtorArgs[0] : "\"\"";

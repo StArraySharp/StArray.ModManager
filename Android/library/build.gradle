@@ -10,7 +10,7 @@ plugins {
 android {
     namespace 'starray.android.modmanager'
     compileSdk 35
-    ndkVersion "25.2.9519653"
+    ndkVersion "27.2.12479018"
 
     defaultConfig {
         minSdk 26
@@ -135,4 +135,27 @@ tasks.register("downloadRuntime"){
         zipFile.delete()
     }
 }
+
+tasks.register("copyCoreClrToJniLibs") {
+    description = '复制 CoreCLR .so 到 jniLibs 以打包进 AAR'
+    group = 'build'
+
+    doLast {
+        def jniLibsDir = file("$projectDir/src/main/jniLibs/arm64-v8a")
+        jniLibsDir.mkdirs()
+
+        fileTree("$projectDir/src/main/cpp/libs/coreclr").include('**/*.so').each { f ->
+            def target = new File(jniLibsDir, f.name)
+            if (!target.exists() || target.lastModified() < f.lastModified()) {
+                copy {
+                    from f
+                    into jniLibsDir
+                }
+                logger.lifecycle("Copied ${f.name} to jniLibs/arm64-v8a")
+            }
+        }
+    }
+}
+
 preBuild.dependsOn downloadRuntime
+preBuild.dependsOn copyCoreClrToJniLibs
