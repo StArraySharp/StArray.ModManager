@@ -46,6 +46,8 @@ public static class Managed
         string modsPath = args.Length > 0
             ? args[0]
             : Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "..", "mods");
+        var logcat = new LogcatCapture(Path.Combine(Path.GetDirectoryName(modsPath), "logcat-output.txt"));
+        logcat.StartAsync();
         AssemblyPath = Path.Combine(Path.GetDirectoryName(modsPath), "manager", typeof(Managed).Namespace + ".dll");
         if (!Directory.Exists(modsPath))
             Directory.CreateDirectory(modsPath);

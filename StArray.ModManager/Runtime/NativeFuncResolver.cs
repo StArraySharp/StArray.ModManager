@@ -1,8 +1,11 @@
+
+namespace StArray.ModManager.Runtime;
 using System.Runtime.InteropServices;
 using System.Text;
 using StArray.ModManager.Native;
 
-namespace StArray.ModManager.Runtime;
+/// <summary>搜索回调：在指定位置验证上下文，返回是否接受此匹配</summary>
+public delegate bool MatchValidator(int offsetInText, byte[] textData, long textAddr);
 
 public class NativeFuncResolver : IDisposable
 {
@@ -31,8 +34,11 @@ public class NativeFuncResolver : IDisposable
             out _dynStrAddr, out _dynStrOffset, out _dynStrSize);
     }
 
-    private ReadOnlySpan<byte> TextSpan =>
+    public byte[] TextBytes =>
         _textBytes ??= _fileData.AsSpan((int)_textOffset, (int)_textSize).ToArray();
+    public long TextBaseAddress => _textAddr;
+
+    private ReadOnlySpan<byte> TextSpan => TextBytes;
 
     // ===================== 统一入口 =====================
 
@@ -153,31 +159,34 @@ public class NativeFuncResolver : IDisposable
         return result.ToArray();
     }
 
+    /// <summary>带验证器的搜索：找到 byte 模式后调用 validator 决定是否接受</summary>
+    public long[] FindAllRva(byte?[] pattern, MatchValidator validator)
+    {
+        var text = TextSpan;
+        var result = new List<long>();
+        int pos = 0;
+        while ((pos = Search(text, pattern, pos)) >= 0)
+        {
+            if (validator(pos, _fileData, _textAddr))
+                result.Add(_textAddr + pos);
+            pos++;
+        }
+        return result.ToArray();
+    }
+
     // ===================== 库加载 =====================
 
     public void Load()
     {
         if (_loadedHandle != IntPtr.Zero) return;
-        if (OperatingSystem.IsWindows()) _loadedHandle = NativeLibrary.Load(FilePath);
-        else
-        {
-            var filename = Path.GetFileName(FilePath);
-            _loadedHandle = DL.GetBaseAddress(filename);
-            if (_loadedHandle == IntPtr.Zero)
-            {
-                DL.Open(filename, DL.RTLDFlags.RTLD_LAZY);
-                _loadedHandle = DL.GetBaseAddress(filename);
-            }
-            if (_loadedHandle == IntPtr.Zero)
-                throw new DllNotFoundException($"Failed to get base address of '{FilePath}'");
-        }
+        _loadedHandle = DL.Open(FilePath, DL.RTLDFlags.RTLD_NOW | DL.RTLDFlags.RTLD_LOCAL);
     }
 
     public IntPtr GetFuncPtr(long rva)
     {
         if (_loadedHandle == IntPtr.Zero)
             throw new InvalidOperationException("Library not loaded. Call Load() first.");
-        return new IntPtr((long)_loadedHandle + rva);
+        return IntPtr.Add(_loadedHandle, (int)rva);
     }
 
     public void Dispose()
@@ -202,7 +211,7 @@ public class NativeFuncResolver : IDisposable
 
     // ===================== 私有方法 =====================
 
-    private static int Search(ReadOnlySpan<byte> data, byte?[] pattern, int start = 0)
+    public static int Search(ReadOnlySpan<byte> data, byte?[] pattern, int start = 0)
     {
         for (int i = start; i <= data.Length - pattern.Length; i++)
         {
