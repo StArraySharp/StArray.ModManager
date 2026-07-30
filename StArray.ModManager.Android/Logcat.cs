@@ -85,15 +85,13 @@ public class LogcatCapture
 
     private async Task ReadStreamAsync(StreamReader reader, CancellationToken token)
     {
-        using var writer = new StreamWriter(_outputFilePath, append: true) { AutoFlush = true };
+        using var writer = new StreamWriter(_outputFilePath, false, System.Text.Encoding.UTF8) { AutoFlush = true };
         while (!reader.EndOfStream && !token.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync();
             if (line != null)
             {
                 await writer.WriteLineAsync(line);
-                // 可选：同时输出到控制台调试
-                // Console.WriteLine(line);
             }
         }
     }

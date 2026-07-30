@@ -263,7 +263,6 @@ public class ModManagerUpdater {
             }
 
             updateDialog(dialog, "正在解压...", -1);
-            clearDirectory(targetDir.toFile());
             unzip(zipFile, targetDir);
 
             Files.write(targetDir.resolve("version.json"),

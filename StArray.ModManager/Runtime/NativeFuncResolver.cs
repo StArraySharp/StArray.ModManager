@@ -7,7 +7,7 @@ using StArray.ModManager.Native;
 /// <summary>搜索回调：在指定位置验证上下文，返回是否接受此匹配</summary>
 public delegate bool MatchValidator(int offsetInText, byte[] textData, long textAddr);
 
-public class NativeFuncResolver : IDisposable
+public class NativeFuncResolver
 {
     private readonly byte[] _fileData;
     private readonly long _textAddr;
@@ -187,15 +187,6 @@ public class NativeFuncResolver : IDisposable
         if (_loadedHandle == IntPtr.Zero)
             throw new InvalidOperationException("Library not loaded. Call Load() first.");
         return IntPtr.Add(_loadedHandle, (int)rva);
-    }
-
-    public void Dispose()
-    {
-        if (_loadedHandle != IntPtr.Zero)
-        {
-            NativeLibrary.Free(_loadedHandle);
-            _loadedHandle = IntPtr.Zero;
-        }
     }
 
     // ===================== 工具 =====================

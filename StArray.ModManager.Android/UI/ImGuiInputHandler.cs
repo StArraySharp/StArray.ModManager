@@ -102,7 +102,7 @@ public static partial class ImGuiInputHandler
         byte?[] sig = NativeFuncResolver.ParseHexPattern(
             "e8 0f 19 fc fd 7b 01 a9 fc 6f 02 a9 fa 67 03 a9 " +
             "f8 5f 04 a9 f6 57 05 a9 f4 4f 06 a9 fd 43 00 91");
-        using var r = new NativeFuncResolver("/system/lib64/libinput.so");
+        var r = new NativeFuncResolver("/system/lib64/libinput.so");
         long rva = r.FindSymbolRva("_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
         try
         {
