@@ -4,6 +4,8 @@
 
 #include <dobby.h>
 
+#include "hook_broker.h"
+
 #define LOG_TAG "StArray.ModManager.Dobby"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -23,9 +25,13 @@ extern "C" {
  * @return 0 成功，非 0 失败
  */
 int modmanager_dobby_hook(void *address, void *replace_func, void **origin_func) {
-    LOGI("DobbyHook at %p, replace=%p", address, replace_func);
-    int ret = DobbyHook(address, (dobby_dummy_func_t)replace_func, (dobby_dummy_func_t *)origin_func);
-    if (ret != 0) LOGE("DobbyHook failed at %p, ret=%d", address, ret);
+    LOGI("HookBroker install at %p, replace=%p", address, replace_func);
+    int ret = modmanager_hook_broker_install(
+        "ModManager.ManagedDobby",
+        address,
+        replace_func,
+        origin_func);
+    if (ret != 0) LOGE("HookBroker install failed at %p, ret=%d", address, ret);
     return ret;
 }
 
@@ -46,8 +52,11 @@ int modmanager_dobby_instrument(void *address, void *pre_handler) {
  * @return 0 成功
  */
 int modmanager_dobby_destroy(void *address) {
-    LOGI("DobbyDestroy at %p", address);
-    return DobbyDestroy(address);
+    // A chain patches the previous detour head, so removing the root target
+    // would leave the remaining layers pointing into invalid trampolines.
+    // Hook layers are therefore process-lifetime once installed.
+    LOGE("DobbyDestroy rejected: HookBroker chains are process-lifetime (address=%p)", address);
+    return -2;
 }
 
 /**

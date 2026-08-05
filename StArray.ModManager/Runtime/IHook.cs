@@ -5,8 +5,15 @@ namespace StArray.ModManager.Runtime;
 /// </summary>
 public interface IHook
 {
+    /// <summary>是否可以在进程运行期间安全移除已安装的 hook。</summary>
+    bool SupportsRuntimeUnhook => true;
+
     /// <summary>安装 hook，将 target 重定向到 detour，返回原始函数指针</summary>
     nint Hook(nint target, nint detour);
+
+    /// <summary>安装带 owner 诊断信息的 hook；旧 provider 默认忽略 owner。</summary>
+    nint Hook(nint target, nint detour, string? owner)
+        => Hook(target, detour);
 
     /// <summary>卸载 target 上的 hook</summary>
     bool Unhook(nint target);

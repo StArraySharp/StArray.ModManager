@@ -9,6 +9,8 @@ namespace StArray.ModManager.Runtime;
 /// </summary>
 public static class HookHelper
 {
+    private static readonly AsyncLocal<string?> CurrentOwner = new();
+
     /// <summary>当前平台的 Hook 实现（Windows = MinHook，Android = Dobby）</summary>
     public static IHook? Instance { get; set; }
 
@@ -21,15 +23,28 @@ public static class HookHelper
     /// <summary>安装 Hook</summary>
     public static nint Hook(nint target, nint detour)
     {
-        if (Instance == null) return nint.Zero;
-        return Instance.Hook(target, detour);
+        var provider = Instance;
+        if (provider == null) return nint.Zero;
+        return provider.Hook(target, detour, CurrentOwner.Value);
     }
 
     /// <summary>卸载 Hook</summary>
     public static bool Unhook(nint target)
     {
-        if (Instance == null) return false;
-        return Instance.Unhook(target);
+        var provider = Instance;
+        // No provider means there is no live native hook to keep. This also
+        // lets generated state clear during test or shutdown cleanup.
+        if (provider == null) return true;
+        if (!provider.SupportsRuntimeUnhook) return false;
+        return provider.Unhook(target);
+    }
+
+    /// <summary>为当前 Mod 的 hook 安装设置诊断 owner。</summary>
+    internal static IDisposable EnterOwnerScope(string owner)
+    {
+        var previous = CurrentOwner.Value;
+        CurrentOwner.Value = owner;
+        return new OwnerScope(previous);
     }
 
     /// <summary>获取库导出函数地址</summary>
@@ -116,5 +131,17 @@ public static class HookHelper
         }
 
         return nint.Zero;
+    }
+
+    private sealed class OwnerScope(string? previous) : IDisposable
+    {
+        private readonly string? _previous = previous;
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                CurrentOwner.Value = _previous;
+        }
     }
 }

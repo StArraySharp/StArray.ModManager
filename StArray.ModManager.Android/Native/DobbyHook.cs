@@ -6,9 +6,15 @@ namespace StArray.ModManager.Android.Native;
 
 public class DobbyHook : IHook
 {
+    public bool SupportsRuntimeUnhook => false;
+
     public nint Hook(nint target, nint detour)
+        => Hook(target, detour, null);
+
+    public nint Hook(nint target, nint detour, string? owner)
     {
-        if (Dobby.Hook(target, detour, out var origin) != 0)
+        var hookOwner = string.IsNullOrWhiteSpace(owner) ? nameof(DobbyHook) : owner;
+        if (Dobby.Hook(target, detour, out var origin, hookOwner) != 0)
             return nint.Zero;
         return origin;
     }

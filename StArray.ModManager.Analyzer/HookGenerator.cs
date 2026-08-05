@@ -202,6 +202,7 @@ public class HookGenerator : IIncrementalGenerator
                 sb.AppendLine();
                 sb.AppendLine($"        private static bool Install_{sf}()");
                 sb.AppendLine("        {");
+                sb.AppendLine($"            if (_{sf}_origPtr != nint.Zero) return true;");
                 if (h.AttrType == "NativeHook")
                 {
                     bool isRva = h.CtorArgs.Length == 2 && h.CtorArgs[0].StartsWith("\"") && !h.CtorArgs[1].StartsWith("\"");
@@ -223,7 +224,6 @@ public class HookGenerator : IIncrementalGenerator
                         sb.AppendLine($"            var t = global::StArray.ModManager.Runtime.HookHelper.GetFunction({l}, {s});");
                     }
                     sb.AppendLine($"            if (t == nint.Zero) return false;");
-                    sb.AppendLine($"            _{sf}_origPtr = t;");
                     if (h.HasUnmanagedCallersOnly)
                         sb.AppendLine($"            var d = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!.MethodHandle.GetFunctionPointer();");
                     else
@@ -232,7 +232,13 @@ public class HookGenerator : IIncrementalGenerator
                         sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
                     }
                     sb.AppendLine($"            var o = global::StArray.ModManager.Runtime.HookHelper.Hook(t, d);");
-                    sb.AppendLine($"            if (o == nint.Zero) return false;");
+                    sb.AppendLine($"            if (o == nint.Zero)");
+                    sb.AppendLine("            {");
+                    if (!h.HasUnmanagedCallersOnly)
+                        sb.AppendLine($"                _{sf}_wrap = null;");
+                    sb.AppendLine("                return false;");
+                    sb.AppendLine("            }");
+                    sb.AppendLine($"            _{sf}_origPtr = t;");
                     sb.AppendLine($"            _{sf}_orig = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(o);");
                     sb.AppendLine("            return true;");
                 }
@@ -275,7 +281,6 @@ public class HookGenerator : IIncrementalGenerator
                         sb.AppendLine($"            var method = cls.GetMethod({m}, {pc});");
                     sb.AppendLine($"            if (method == null) return false;");
                     sb.AppendLine($"            var t = method.FunctionPtr;");
-                    sb.AppendLine($"            _{sf}_origPtr = t;");
                     if (h.HasUnmanagedCallersOnly)
                         sb.AppendLine($"            var d = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!.MethodHandle.GetFunctionPointer();");
                     else
@@ -284,7 +289,13 @@ public class HookGenerator : IIncrementalGenerator
                         sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
                     }
                     sb.AppendLine($"            var o = global::StArray.ModManager.Runtime.HookHelper.Hook(t, d);");
-                    sb.AppendLine($"            if (o == nint.Zero) return false;");
+                    sb.AppendLine($"            if (o == nint.Zero)");
+                    sb.AppendLine("            {");
+                    if (!h.HasUnmanagedCallersOnly)
+                        sb.AppendLine($"                _{sf}_wrap = null;");
+                    sb.AppendLine("                return false;");
+                    sb.AppendLine("            }");
+                    sb.AppendLine($"            _{sf}_origPtr = t;");
                     sb.AppendLine($"            _{sf}_orig = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(o);");
                     sb.AppendLine("            return true;");
                 }
@@ -317,11 +328,13 @@ public class HookGenerator : IIncrementalGenerator
                 var sf = Sanitize(h.MethodName);
                 sb.AppendLine($"            if (_{sf}_origPtr != nint.Zero)");
                 sb.AppendLine($"            {{");
-                sb.AppendLine($"                global::StArray.ModManager.Runtime.HookHelper.Unhook(_{sf}_origPtr);");
-                sb.AppendLine($"                _{sf}_origPtr = nint.Zero;");
-                sb.AppendLine($"                _{sf}_orig = null;");
+                sb.AppendLine($"                if (global::StArray.ModManager.Runtime.HookHelper.Unhook(_{sf}_origPtr))");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    _{sf}_origPtr = nint.Zero;");
+                sb.AppendLine($"                    _{sf}_orig = null;");
                 if (!h.HasUnmanagedCallersOnly)
-                    sb.AppendLine($"                _{sf}_wrap = null;");
+                    sb.AppendLine($"                    _{sf}_wrap = null;");
+                sb.AppendLine("                }");
                 sb.AppendLine($"            }}");
             }
             sb.AppendLine("        }");

@@ -1,95 +1,157 @@
-using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.Android.Native;
 
 /// <summary>
-/// Dobby Hook P/Invoke 封装。
-/// 对应 native 端的 <c>core/dobby_hook.cpp</c>，导出 C ABI 函数。
-/// 所有方法通过 <c>[DllImport("modmanager")]</c> 调用 <c>libmodmanager.so</c>。
+/// Dobby P/Invoke wrapper backed by the process-wide native HookBroker.
+/// The broker appends different detours to the same target and returns the
+/// continuation for each layer.
 /// </summary>
 public static class Dobby
 {
     private const string Lib = "modmanager";
+    private static readonly object HookLock = new();
+    private static readonly Dictionary<HookKey, HookRecord> InstalledHooks = new();
+    private static readonly Dictionary<nint, HookRecord> LatestHooks = new();
 
-    // ========================================================================
-    // Native externs
-    // ========================================================================
+    private readonly record struct HookKey(nint Target, nint Detour);
+    private sealed record HookRecord(nint Target, nint Detour, nint Origin, string Owner);
 
-    /// <summary>安装 inline hook。</summary>
-    /// <param name="address">目标函数地址</param>
-    /// <param name="replace">替换函数地址（nint 指向 delegate 或函数指针）</param>
-    /// <param name="origin">[out] 原函数指针（用于调用原逻辑）</param>
-    /// <returns>0 = 成功，非 0 = 失败</returns>
-    [DllImport(Lib, EntryPoint = "modmanager_dobby_hook")]
-    public static extern int Hook(nint address, nint replace, out nint origin);
+    [DllImport(Lib, EntryPoint = "modmanager_hook_broker_install", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int InstallBrokerHook(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string owner,
+        nint address,
+        nint replace,
+        out nint origin);
+
+    /// <summary>安装 inline hook，并返回当前 layer 的 continuation。</summary>
+    public static int Hook(nint address, nint replace, out nint origin)
+        => Hook(address, replace, out origin, "Dobby.Hook");
 
     /// <summary>
-    /// 安装 inline hook — 传入 C# Reflection MethodInfo。
-    /// 方法会被 PrepareMethod 强制 JIT 编译，再取其函数指针作为 replace。
+    /// 安装 inline hook，并记录安装方。
+    /// 同一地址的不同 detour 会由 native HookBroker 追加为新 layer；同一
+    /// detour 的重复注册复用原 continuation。
     /// </summary>
-    /// <param name="address">目标函数地址</param>
-    /// <param name="replaceMethod">C# MethodInfo（需为静态方法）</param>
-    /// <param name="origin">[out] 原函数指针</param>
-    /// <returns>0 = 成功，非 0 = 失败</returns>
+    public static int Hook(nint address, nint replace, out nint origin, string owner)
+    {
+        origin = nint.Zero;
+        if (address == nint.Zero || replace == nint.Zero)
+            return -1;
+
+        lock (HookLock)
+        {
+            var key = new HookKey(address, replace);
+            if (InstalledHooks.TryGetValue(key, out var existing))
+            {
+                origin = existing.Origin;
+                return 0;
+            }
+
+            var normalizedOwner = string.IsNullOrWhiteSpace(owner) ? "unknown" : owner;
+            var result = InstallBrokerHook(normalizedOwner, address, replace, out origin);
+            if (result == 0 && origin != nint.Zero)
+            {
+                var record = new HookRecord(
+                    address,
+                    replace,
+                    origin,
+                    normalizedOwner);
+                InstalledHooks[key] = record;
+                LatestHooks[address] = record;
+            }
+
+            return result;
+        }
+    }
+
+    /// <summary>获取目标地址最近安装的 layer，供诊断使用。</summary>
+    public static bool TryGetInstalledHook(
+        nint address,
+        out string owner,
+        out nint detour,
+        out nint origin)
+    {
+        lock (HookLock)
+        {
+            if (LatestHooks.TryGetValue(address, out var existing))
+            {
+                owner = existing.Owner;
+                detour = existing.Detour;
+                origin = existing.Origin;
+                return true;
+            }
+        }
+
+        owner = string.Empty;
+        detour = nint.Zero;
+        origin = nint.Zero;
+        return false;
+    }
+
+    /// <summary>安装 inline hook，目标替换方法来自托管 MethodInfo。</summary>
     public static int Hook(nint address, MethodInfo replaceMethod, out nint origin)
     {
         if (replaceMethod == null)
         {
-            origin = IntPtr.Zero;
+            origin = nint.Zero;
             return -1;
         }
-        // 强制 JIT 编译该方法
+
         RuntimeHelpers.PrepareMethod(replaceMethod.MethodHandle);
-        nint replacePtr = replaceMethod.MethodHandle.GetFunctionPointer();
-        return Hook(address, replacePtr, out origin);
+        var replacePtr = replaceMethod.MethodHandle.GetFunctionPointer();
+        var owner = replaceMethod.DeclaringType == null
+            ? replaceMethod.Name
+            : replaceMethod.DeclaringType.FullName + "." + replaceMethod.Name;
+        return Hook(address, replacePtr, out origin, owner);
     }
 
-    /// <summary>安装动态指令插桩。</summary>
-    /// <param name="address">目标函数地址</param>
-    /// <param name="preHandler">前置回调函数指针（dobby_instrument_callback_t 签名）</param>
-    /// <returns>0 = 成功</returns>
     [DllImport(Lib, EntryPoint = "modmanager_dobby_instrument")]
     public static extern int Instrument(nint address, nint preHandler);
 
-    /// <summary>移除 hook 并恢复原函数。</summary>
-    /// <param name="address">被 hook 的函数地址</param>
-    /// <returns>0 = 成功</returns>
+    /// <summary>
+    /// 尝试移除 hook。HookBroker 链一旦建立便保持到进程结束，因此该调用
+    /// 对 broker hook 返回失败，不会破坏其他 Mod 的 continuation。
+    /// </summary>
     [DllImport(Lib, EntryPoint = "modmanager_dobby_destroy")]
-    public static extern int Destroy(nint address);
+    private static extern int RemoveHook(nint address);
 
-    /// <summary>按动态库名和符号名解析函数地址。</summary>
-    /// <param name="imageName">动态库名，如 "libil2cpp.so"</param>
-    /// <param name="symbolName">符号名</param>
-    /// <returns>符号地址，失败返回 nint.Zero</returns>
+    public static int Destroy(nint address)
+    {
+        var result = RemoveHook(address);
+        if (result == 0)
+        {
+            lock (HookLock)
+            {
+                foreach (var key in InstalledHooks.Keys
+                             .Where(key => key.Target == address)
+                             .ToArray())
+                    InstalledHooks.Remove(key);
+                LatestHooks.Remove(address);
+            }
+        }
+
+        return result;
+    }
+
     [DllImport(Lib, EntryPoint = "modmanager_dobby_symbol_resolver")]
-    public static extern nint _SymbolResolver(string imageName, string symbolName);
+    public static extern nint SymbolResolver(string imageName, string symbolName);
 
-    /// <summary>内存代码补丁。</summary>
-    /// <param name="address">目标地址</param>
-    /// <param name="buffer">补丁数据</param>
-    /// <param name="bufferSize">补丁数据大小</param>
-    /// <returns>0 = 成功</returns>
+    // Preserve the old helper name used by existing Android code.
+    public static nint _SymbolResolver(string imageName, string symbolName) =>
+        SymbolResolver(imageName, symbolName);
+
     [DllImport(Lib, EntryPoint = "modmanager_dobby_code_patch")]
     public static extern int CodePatch(nint address, byte[] buffer, uint bufferSize);
 
-    /// <summary>获取 Dobby 版本字符串。</summary>
     [DllImport(Lib, EntryPoint = "modmanager_dobby_get_version")]
-    private static extern nint _GetVersionRaw();
-    
-    public static IntPtr SymbolResolver(string imageName, string symbolName){
-        var handle = _SymbolResolver(imageName, symbolName);
-        Logger.Error(nameof(SymbolResolver), $"Resolving {imageName}, {symbolName} = {handle}");
-        return handle;
-    }
+    private static extern nint GetVersionRaw();
 
-    /// <summary>获取 Dobby 版本字符串。</summary>
     public static string GetVersion()
     {
-        var ptr = _GetVersionRaw();
+        var ptr = GetVersionRaw();
         return Marshal.PtrToStringAnsi(ptr) ?? "unknown";
     }
 }

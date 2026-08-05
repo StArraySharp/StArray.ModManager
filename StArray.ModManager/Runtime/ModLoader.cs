@@ -188,7 +188,8 @@ public class ModLoader
                 {
                     var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;
                     mod.PluginInstance = plugin;
-                    plugin.OnLoad();
+                    using (HookHelper.EnterOwnerScope(mod.Id))
+                        plugin.OnLoad();
 
                     if (plugin is IModSettings s)
                         ModManagerUI.LoadSettings(mod, s);
@@ -217,7 +218,11 @@ public class ModLoader
     {
         if (mod.LoadState != ModLoadState.Loaded) return;
 
-        mod.PluginInstance?.OnUnload();
+        if (mod.PluginInstance != null)
+        {
+            using (HookHelper.EnterOwnerScope(mod.Id))
+                mod.PluginInstance.OnUnload();
+        }
         mod.PluginInstance = null;
         mod.IsEnabled = false;
         mod.LoadState = ModLoadState.NotLoaded;
