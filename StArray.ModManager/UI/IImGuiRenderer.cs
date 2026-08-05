@@ -35,12 +35,13 @@ public interface IImGuiRenderer
         FreeFontMemory();
     }
 
-    private static nint _fontPtr1, _fontPtr2;
+    private static nint _fontPtr1, _fontPtr2, _glyphRangesPtr;
 
     private static void FreeFontMemory()
     {
         if (_fontPtr1 != 0) { Marshal.FreeHGlobal(_fontPtr1); _fontPtr1 = 0; }
         if (_fontPtr2 != 0) { Marshal.FreeHGlobal(_fontPtr2); _fontPtr2 = 0; }
+        if (_glyphRangesPtr != 0) { Marshal.FreeHGlobal(_glyphRangesPtr); _glyphRangesPtr = 0; }
     }
 
     private static unsafe void LoadEmbeddedFont(ImGuiIOPtr io)
@@ -57,13 +58,43 @@ public interface IImGuiRenderer
             _fontPtr1 = Marshal.AllocHGlobal(ttf.Length);
             Marshal.Copy(ttf, 0, _fontPtr1, ttf.Length);
 
-            // MergeMode: 中文字形合并到图标基础字体
+            // Merge the CJK font into the icon font. The range is kept in unmanaged
+            // memory until Build() because ImGui reads it while building the atlas.
             var cfg = ImGuiNative.ImFontConfig_ImFontConfig();
             cfg->MergeMode = 1;
             cfg->FontDataOwnedByAtlas = 0; // 自己管理内存，Build() 后释放
 
-            var glyphRanges = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
-            io.Fonts.AddFontFromMemoryTTF(_fontPtr1, ttf.Length, 16f, cfg, glyphRanges);
+            ushort[] glyphRanges =
+            [
+                0x0020, 0x00FF, // Basic Latin and Latin-1 Supplement
+                0x1100, 0x11FF, // Hangul Jamo
+                0x2000, 0x206F, // General Punctuation
+                0x2E80, 0x2FFF, // CJK radicals and ideographs
+                0x3000, 0x30FF, // CJK punctuation, Hiragana, Katakana
+                0x3100, 0x31FF, // Bopomofo and Hangul compatibility Jamo
+                0x3200, 0x33FF, // Enclosed CJK and compatibility characters
+                0x3400, 0x4DBF, // CJK Unified Ideographs Extension A
+                0x4E00, 0x9FFF, // CJK Unified Ideographs
+                0xA960, 0xA97F, // Hangul Jamo Extended-A
+                0xAC00, 0xD7A3, // Hangul syllables
+                0xD7B0, 0xD7FF, // Hangul Jamo Extended-B
+                0xF900, 0xFAFF, // CJK compatibility ideographs
+                0xFE10, 0xFE6F, // CJK compatibility forms
+                0xFF00, 0xFFEF, // Halfwidth and Fullwidth Forms
+                0
+            ];
+            var rangeBytes = checked(glyphRanges.Length * sizeof(ushort));
+            _glyphRangesPtr = Marshal.AllocHGlobal(rangeBytes);
+            fixed (ushort* ranges = glyphRanges)
+            {
+                Buffer.MemoryCopy(
+                    ranges,
+                    (void*)_glyphRangesPtr,
+                    rangeBytes,
+                    rangeBytes);
+            }
+
+            io.Fonts.AddFontFromMemoryTTF(_fontPtr1, ttf.Length, 16f, cfg, _glyphRangesPtr);
             ImGuiNative.ImFontConfig_destroy(cfg);
         }
         catch { /* 静默跳过 */ }
