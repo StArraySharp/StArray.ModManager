@@ -32,9 +32,9 @@ public static class HookHelper
     public static bool Unhook(nint target)
     {
         var provider = Instance;
-        // No provider means there is no live native hook to keep. This also
-        // lets generated state clear during test or shutdown cleanup.
-        if (provider == null) return true;
+        // Without a provider we cannot know whether the native hook is still
+        // live. Generated hooks must retain their callback in this case.
+        if (provider == null) return false;
         if (!provider.SupportsRuntimeUnhook) return false;
         return provider.Unhook(target);
     }

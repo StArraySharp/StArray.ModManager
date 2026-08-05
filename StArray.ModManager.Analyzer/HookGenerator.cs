@@ -193,16 +193,60 @@ public class HookGenerator : IIncrementalGenerator
                 sb.AppendLine($"        private delegate {rt} _{sf}Delegate({pd});");
                 sb.AppendLine($"        private static nint _{sf}_origPtr;");
                 sb.AppendLine($"        private static _{sf}Delegate? _{sf}_orig;");
+                sb.AppendLine($"        private static int _{sf}_enabled;");
 
-                // ── 持久引用（防止 delegate 被 GC；[UnmanagedCallersOnly] 不需要）──
-                if (!h.HasUnmanagedCallersOnly)
-                    sb.AppendLine($"        private static _{sf}Delegate? _{sf}_wrap;");
+                // The native hook can outlive a Mod on Android. Keep the
+                // dispatch delegate alive and turn an uninstall into a
+                // forwarding operation when the provider cannot unhook.
+                sb.AppendLine($"        private static _{sf}Delegate? _{sf}_wrap;");
+                if (h.HasUnmanagedCallersOnly)
+                    sb.AppendLine($"        private static _{sf}Delegate? _{sf}_user;");
+
+                // ── Dispatch ──
+                sb.AppendLine();
+                sb.AppendLine($"        private static {rt} _{sf}_Dispatch({pd})");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            if (global::System.Threading.Volatile.Read(ref _{sf}_enabled) == 0)");
+                sb.AppendLine("            {");
+                if (rt == "void")
+                {
+                    sb.AppendLine($"                _{sf}_orig?.Invoke({pn});");
+                    sb.AppendLine("                return;");
+                }
+                else
+                {
+                    sb.AppendLine($"                if (_{sf}_orig != null) return _{sf}_orig({pn});");
+                    sb.AppendLine("                return default;");
+                }
+                sb.AppendLine("            }");
+                if (h.HasUnmanagedCallersOnly)
+                {
+                    if (rt == "void")
+                        sb.AppendLine($"            _{sf}_user?.Invoke({pn});");
+                    else
+                        sb.AppendLine($"            if (_{sf}_user != null) return _{sf}_user({pn});");
+                    if (rt != "void")
+                        sb.AppendLine("            return default;");
+                }
+                else if (rt == "void")
+                {
+                    sb.AppendLine($"            {h.MethodName}({pn});");
+                }
+                else
+                {
+                    sb.AppendLine($"            return {h.MethodName}({pn});");
+                }
+                sb.AppendLine("        }");
 
                 // ── Install ──
                 sb.AppendLine();
                 sb.AppendLine($"        private static bool Install_{sf}()");
                 sb.AppendLine("        {");
-                sb.AppendLine($"            if (_{sf}_origPtr != nint.Zero) return true;");
+                sb.AppendLine($"            if (_{sf}_origPtr != nint.Zero)");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                global::System.Threading.Volatile.Write(ref _{sf}_enabled, 1);");
+                sb.AppendLine("                return true;");
+                sb.AppendLine("            }");
                 if (h.AttrType == "NativeHook")
                 {
                     bool isRva = h.CtorArgs.Length == 2 && h.CtorArgs[0].StartsWith("\"") && !h.CtorArgs[1].StartsWith("\"");
@@ -225,21 +269,24 @@ public class HookGenerator : IIncrementalGenerator
                     }
                     sb.AppendLine($"            if (t == nint.Zero) return false;");
                     if (h.HasUnmanagedCallersOnly)
-                        sb.AppendLine($"            var d = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!.MethodHandle.GetFunctionPointer();");
-                    else
                     {
-                        sb.AppendLine($"            _{sf}_wrap = {h.MethodName};");
-                        sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
+                        sb.AppendLine($"            var userMethod = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!;");
+                        sb.AppendLine("            global::System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(userMethod.MethodHandle);");
+                        sb.AppendLine($"            _{sf}_user = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(userMethod.MethodHandle.GetFunctionPointer());");
                     }
+                    sb.AppendLine($"            _{sf}_wrap = _{sf}_Dispatch;");
+                    sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
                     sb.AppendLine($"            var o = global::StArray.ModManager.Runtime.HookHelper.Hook(t, d);");
                     sb.AppendLine($"            if (o == nint.Zero)");
                     sb.AppendLine("            {");
-                    if (!h.HasUnmanagedCallersOnly)
-                        sb.AppendLine($"                _{sf}_wrap = null;");
+                    sb.AppendLine($"                _{sf}_wrap = null;");
+                    if (h.HasUnmanagedCallersOnly)
+                        sb.AppendLine($"                _{sf}_user = null;");
                     sb.AppendLine("                return false;");
                     sb.AppendLine("            }");
                     sb.AppendLine($"            _{sf}_origPtr = t;");
                     sb.AppendLine($"            _{sf}_orig = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(o);");
+                    sb.AppendLine($"            global::System.Threading.Volatile.Write(ref _{sf}_enabled, 1);");
                     sb.AppendLine("            return true;");
                 }
                 else // UnmanagedHook
@@ -282,21 +329,24 @@ public class HookGenerator : IIncrementalGenerator
                     sb.AppendLine($"            if (method == null) return false;");
                     sb.AppendLine($"            var t = method.FunctionPtr;");
                     if (h.HasUnmanagedCallersOnly)
-                        sb.AppendLine($"            var d = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!.MethodHandle.GetFunctionPointer();");
-                    else
                     {
-                        sb.AppendLine($"            _{sf}_wrap = {h.MethodName};");
-                        sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
+                        sb.AppendLine($"            var userMethod = typeof({h.ContainingType}).GetMethod(\"{h.MethodName}\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!;");
+                        sb.AppendLine("            global::System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(userMethod.MethodHandle);");
+                        sb.AppendLine($"            _{sf}_user = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(userMethod.MethodHandle.GetFunctionPointer());");
                     }
+                    sb.AppendLine($"            _{sf}_wrap = _{sf}_Dispatch;");
+                    sb.AppendLine($"            var d = global::System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_{sf}_wrap);");
                     sb.AppendLine($"            var o = global::StArray.ModManager.Runtime.HookHelper.Hook(t, d);");
                     sb.AppendLine($"            if (o == nint.Zero)");
                     sb.AppendLine("            {");
-                    if (!h.HasUnmanagedCallersOnly)
-                        sb.AppendLine($"                _{sf}_wrap = null;");
+                    sb.AppendLine($"                _{sf}_wrap = null;");
+                    if (h.HasUnmanagedCallersOnly)
+                        sb.AppendLine($"                _{sf}_user = null;");
                     sb.AppendLine("                return false;");
                     sb.AppendLine("            }");
                     sb.AppendLine($"            _{sf}_origPtr = t;");
                     sb.AppendLine($"            _{sf}_orig = global::System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<_{sf}Delegate>(o);");
+                    sb.AppendLine($"            global::System.Threading.Volatile.Write(ref _{sf}_enabled, 1);");
                     sb.AppendLine("            return true;");
                 }
                 sb.AppendLine("        }");
@@ -316,8 +366,17 @@ public class HookGenerator : IIncrementalGenerator
             sb.AppendLine("        public static bool InstallHooks()");
             sb.AppendLine("        {");
             sb.AppendLine("            bool ok = true;");
+            sb.AppendLine("            try");
+            sb.AppendLine("            {");
             foreach (var h in group)
-                sb.AppendLine($"            ok &= Install_{Sanitize(h.MethodName)}();");
+                sb.AppendLine($"                if (!Install_{Sanitize(h.MethodName)}()) ok = false;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            catch");
+            sb.AppendLine("            {");
+            sb.AppendLine("                UninstallHooks();");
+            sb.AppendLine("                throw;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if (!ok) UninstallHooks();");
             sb.AppendLine("            return ok;");
             sb.AppendLine("        }");
             sb.AppendLine();
@@ -328,12 +387,14 @@ public class HookGenerator : IIncrementalGenerator
                 var sf = Sanitize(h.MethodName);
                 sb.AppendLine($"            if (_{sf}_origPtr != nint.Zero)");
                 sb.AppendLine($"            {{");
+                sb.AppendLine($"                global::System.Threading.Volatile.Write(ref _{sf}_enabled, 0);");
                 sb.AppendLine($"                if (global::StArray.ModManager.Runtime.HookHelper.Unhook(_{sf}_origPtr))");
                 sb.AppendLine("                {");
                 sb.AppendLine($"                    _{sf}_origPtr = nint.Zero;");
                 sb.AppendLine($"                    _{sf}_orig = null;");
-                if (!h.HasUnmanagedCallersOnly)
-                    sb.AppendLine($"                    _{sf}_wrap = null;");
+                sb.AppendLine($"                    _{sf}_wrap = null;");
+                if (h.HasUnmanagedCallersOnly)
+                    sb.AppendLine($"                    _{sf}_user = null;");
                 sb.AppendLine("                }");
                 sb.AppendLine($"            }}");
             }
