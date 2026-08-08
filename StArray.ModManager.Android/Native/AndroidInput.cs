@@ -33,7 +33,7 @@ public static class AndroidInput
         Multiple = 2,
     }
 
-    /// <summary>触摸动作（主动作需用 ActionMask 提取）</summary>
+    /// <summary>触摸动作（主动作需先去除指针索引位）</summary>
     public enum MotionAction
     {
         Down = 0,
@@ -43,11 +43,12 @@ public static class AndroidInput
         Outside = 4,
         PointerDown = 5,
         PointerUp = 6,
-        HoverEnter = 7,
-        HoverMove = 8,
-        HoverExit = 9,
-        ButtonPress = 10,
-        ButtonRelease = 11,
+        HoverMove = 7,
+        Scroll = 8,
+        HoverEnter = 9,
+        HoverExit = 10,
+        ButtonPress = 11,
+        ButtonRelease = 12,
     }
 
     /// <summary>Meta 键状态</summary>
@@ -70,6 +71,13 @@ public static class AndroidInput
         public const int PointerIndex = 0xFF00;
         public const int PointerIndexShift = 8;
     }
+
+    // Keep integer helpers available to the timestamp broadcast path. The raw
+    // action is read only once per native event, avoiding repeated P/Invoke
+    // calls on the Android input thread.
+    public const int ActionMask = MotionMask.Action;
+    public const int ActionPointerIndexMask = MotionMask.PointerIndex;
+    public const int ActionPointerIndexShift = MotionMask.PointerIndexShift;
 
     // ======================== 不透明句柄结构体 ========================
 
@@ -156,7 +164,25 @@ public static class AndroidInput
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern int AMotionEvent_getPointerId(IntPtr ev, int pointerIndex);
 
+    /// <summary>
+    /// 事件发生时刻，单位纳秒，时钟源为 <c>CLOCK_MONOTONIC</c>。
+    /// 该时间戳独立于渲染帧，可用于还原触摸真实发生时刻。
+    /// </summary>
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern long AMotionEvent_getEventTime(IntPtr ev);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern long AMotionEvent_getDownTime(IntPtr ev);
+
     // ======================== 辅助方法（扩展风格） ========================
+
+    /// <summary>从原始动作值取出主动作。</summary>
+    public static MotionAction GetMainAction(int rawAction)
+        => (MotionAction)(rawAction & ActionMask);
+
+    /// <summary>从原始动作值取出指针索引。</summary>
+    public static int GetPointerIndex(int rawAction)
+        => (rawAction & ActionPointerIndexMask) >> ActionPointerIndexShift;
 
     /// <summary>获取触摸事件的主动作（去除指针索引）</summary>
     public static MotionAction GetMainAction(this IntPtr ev)
@@ -164,13 +190,13 @@ public static class AndroidInput
         if (AInputEvent_getType(ev) != EventType.Motion)
             throw new InvalidOperationException("事件不是 Motion 类型");
         int raw = AMotionEvent_getAction(ev);
-        return (MotionAction)(raw & MotionMask.Action);
+        return GetMainAction(raw);
     }
 
     /// <summary>获取触摸事件的指针索引（用于多点触控）</summary>
     public static int GetPointerIndex(this IntPtr ev)
     {
         int raw = AMotionEvent_getAction(ev);
-        return (raw & MotionMask.PointerIndex) >> MotionMask.PointerIndexShift;
+        return GetPointerIndex(raw);
     }
 }

@@ -93,6 +93,8 @@ public static partial class ImGuiInputHandler
         var result = OnInitializeMotionEventOriginal(@event, message);
         var x = AndroidInput.AMotionEvent_getX(new(@event), 0);
         var y = AndroidInput.AMotionEvent_getY(new(@event), 0);
+        if (InputEvents.HasSubscribers)
+            InputEvents.RaiseFrom(new IntPtr(@event));
         ImGuiImplAndroid.HandleInputEvent(new IntPtr(@event));
         return result;
     }

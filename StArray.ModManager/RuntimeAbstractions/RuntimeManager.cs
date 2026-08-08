@@ -72,6 +72,33 @@ public static class RuntimeManager
         return null;
     }
 
+    /// <summary>
+    /// 从运行时对象取得其真实类型。
+    /// </summary>
+    /// <remarks>
+    /// 泛型容器只有在对象实例创建后才能拿到具体方法表。调用方可缓存返回类型的
+    /// Add/Clear 等方法，避免每次事件通过字符串重新解析。
+    /// </remarks>
+    public static IRuntimeClass? GetObjectClass(nint objectPtr)
+    {
+        if (objectPtr == 0)
+            return null;
+
+        if (IsIl2Cpp)
+        {
+            nint klass = Il2CppFunctions.il2cpp_object_get_class(objectPtr);
+            return klass == 0 ? null : new Il2CppClass(klass);
+        }
+
+        if (IsMono)
+        {
+            nint klass = MonoFunctions.MonoObjectGetClass(objectPtr);
+            return klass == 0 ? null : new MonoClass(klass);
+        }
+
+        return null;
+    }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
 
