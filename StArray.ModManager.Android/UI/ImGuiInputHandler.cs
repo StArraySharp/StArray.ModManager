@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ImGuiNET;
 using StArray.ModManager.Android.Native;
@@ -68,86 +67,42 @@ public static partial class ImGuiInputHandler
         IsInitialized = true;
     }
 
-    /*
-    /// <summary>触摸事件 Hook 回调</summary>
-    [NativeHook("libinput.so","_ZN7android13InputConsumer14consumeSamplesEPNS_26InputEventFactoryInterfaceERNS0_5BatchEmPjPPNS_10InputEventE")]
-    public unsafe static long OnConsumeSamples(void* thiz,void* factory, IntPtr batch,
-        ulong count, uint* outSeq, void** outEvent)
+    /// <summary>在 Android 输入消费完成后读取本次输出事件。</summary>
+    [NativeHook("libinput.so", "_ZN7android13InputConsumer7consumeEPNS_26InputEventFactoryInterfaceEblPjPPNS_10InputEventE",
+        Convention = CallingConvention.Cdecl)]
+    public unsafe static int OnConsume(
+        void* thiz,
+        void* factory,
+        bool consumeBatches,
+        long frameTime,
+        uint* outSeq,
+        void** outEvent)
     {
-        var result = OnConsumeSamplesOriginal(thiz,factory, batch, count, outSeq, outEvent);
-        if (IsInitialized && *outEvent != null) ImGuiImplAndroid.HandleInputEvent(new IntPtr(*outEvent));
-        return result;
-    }
-    
-    [NativeHook("libinput.so","_ZN7android13InputConsumer7consumeEPNS_26InputEventFactoryInterfaceEblPjPPNS_10InputEventE")]
-    public unsafe static long OnConsume(void* thiz, void* factory, bool consumeBatches, ulong frameTime, uint* outSeq, void** outEvent)
-    {
-        var result = OnConsumeOriginal(thiz, factory, consumeBatches, frameTime, outSeq, outEvent);
-        if (IsInitialized && *outEvent != null) ImGuiImplAndroid.HandleInputEvent(new IntPtr(*outEvent));
-        return result;
-    }*/
-    
-    [NativeHook("GetInitializeMotionEventAddress")]
-    public unsafe static bool OnInitializeMotionEvent(void* @event, void* message)
-    {
-        var result = OnInitializeMotionEventOriginal(@event, message);
-        var x = AndroidInput.AMotionEvent_getX(new(@event), 0);
-        var y = AndroidInput.AMotionEvent_getY(new(@event), 0);
-        ImGuiImplAndroid.HandleInputEvent(new IntPtr(@event));
+        var result = OnConsumeOriginal(
+            thiz,
+            factory,
+            consumeBatches,
+            frameTime,
+            outSeq,
+            outEvent);
+        if (outEvent != null && *outEvent != null)
+            DispatchInputEvent(new IntPtr(*outEvent));
         return result;
     }
 
-    private static nint GetInitializeMotionEventAddress()
+    /// <summary>
+    /// 把一个原生输入事件同时送往 ImGui 和 <see cref="InputEvents"/> 订阅方。
+    /// </summary>
+    /// <remarks>
+    /// 输入广播不依赖 ImGui 上下文是否已经初始化；这样异步输入 Mod 可以在
+    /// 菜单、暂停和非游玩阶段继续收到原始事件并自行决定是否消费。
+    /// </remarks>
+    private static void DispatchInputEvent(IntPtr inputEvent)
     {
-        byte?[] sig = NativeFuncResolver.ParseHexPattern(
-            "e8 0f 19 fc fd 7b 01 a9 fc 6f 02 a9 fa 67 03 a9 " +
-            "f8 5f 04 a9 f6 57 05 a9 f4 4f 06 a9 fd 43 00 91");
-        var r = new NativeFuncResolver("/system/lib64/libinput.so");
-        long rva = r.FindSymbolRva("_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
-        try
-        {
-            if (rva < 0)
-            {
-                var text = r.TextBytes;
-                long textAddr = r.TextBaseAddress;
-                int pos = 0;
-                while ((pos = NativeFuncResolver.Search(text, sig, pos)) >= 0)
-                {
-                    int ctxEnd = Math.Min(pos + 60, text.Length);
-                    bool hasMrs = false, hasLdr = false;
-                    for (int j = pos + 32; j <= ctxEnd - 4; j += 4)
-                    {
-                        int inst = BitConverter.ToInt32(text.AsSpan(j));
-                        if (!hasMrs && (inst & 0xffffffe0) == 0xd53bd040)
-                            hasMrs = true;
-                        if (!hasLdr && (inst & 0xffe003e0) == 0xb9400020)
-                        {
-                            int imm12 = (inst >> 10) & 0xfff;
-                            if (imm12 * 4 == 0xc) hasLdr = true;
-                        }
-                        if (hasMrs && hasLdr) break;
-                    }
-                    if (hasMrs && hasLdr)
-                    {
-                        rva = textAddr + pos;
-                        if (pos >= 4)
-                        {
-                            int prev = BitConverter.ToInt32(text.AsSpan(pos - 4));
-                            if (prev == unchecked((int)0xd503233f)) rva -= 4;
-                        }
-                        break;
-                    }
-                    pos++;
-                }
-                if (rva < 0) throw new KeyNotFoundException("initializeMotionEvent not found by signature.");
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(nameof(ImGuiInputHandler), ex.ToString());
-        }
-        r.Load();
-        return r.GetFuncPtr(rva);
+        if (InputEvents.HasSubscribers)
+            InputEvents.RaiseFrom(inputEvent);
+        if (IsInitialized)
+            ImGuiImplAndroid.HandleInputEvent(inputEvent);
     }
 
     private static JavaClass? s_utilsClass;
