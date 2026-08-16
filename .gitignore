@@ -77,3 +77,6 @@ imgui.ini
 Corehold
 .claude
 .backup
+dotnet-tools.json
+Scripts/run_game.sh
+StArray.ModManager.Setup

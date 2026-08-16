@@ -13,6 +13,8 @@ public unsafe class MonoAssembly : IRuntimeAssembly
 
     public string? Name => MonoFunctions.MonoImageGetName(MonoFunctions.MonoAssemblyGetImage(Ptr));
 
+    public string? Filename => MonoFunctions.MonoImageGetFilename(MonoFunctions.MonoAssemblyGetImage(Ptr));
+
     public MonoImage? GetImage()
     {
         var img = MonoFunctions.MonoAssemblyGetImage(Ptr);

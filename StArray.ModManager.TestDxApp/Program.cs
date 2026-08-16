@@ -9,6 +9,69 @@ using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
 
+#if NET481
+using Silk.NET.Input.Glfw;
+using Silk.NET.Windowing.Glfw;
+#endif
+
+// ──────────────── mono / net481：按绝对路径预加载原生 DLL ────────────────
+// mono 下 LoadLibrary 的搜索路径基于 mono-sgen.exe 所在目录，而非工作目录，
+// Silk.NET 的 GlfwPlatform.IsApplicable 探测会静默失败。这里用绝对路径预加载，
+// 进程内模块缓存生效后，后续裸名加载即可命中。
+PreloadNativeLibrary("glfw3.dll");
+PreloadNativeLibrary("SDL2.dll");
+
+[DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+static extern IntPtr LoadLibraryW(string lpFileName);
+
+static void PreloadNativeLibrary(string dll)
+{
+    var path = Path.Combine(AppContext.BaseDirectory, dll);
+    if (File.Exists(path) && LoadLibraryW(path) != IntPtr.Zero)
+        Console.WriteLine($"[preload] {dll} ok");
+}
+
+// ──────────────── 加载 Corehold 劫持的 winmm.dll 并调用 ────────────────
+// Corehold 通过 winmm 代理注入：加载它自身的初始化逻辑（托管加载器 + .NET 10 运行时
+// 自动下载）。调用标准导出 timeGetTime 触发其 DllMain/bootstrap。
+var winmmPath = Path.Combine(AppContext.BaseDirectory, "winmm.dll");
+if (File.Exists(winmmPath))
+{
+    var hWinmm = LoadLibraryW(winmmPath);
+    if (hWinmm != IntPtr.Zero)
+    {
+        Console.WriteLine($"[winmm] loaded 0x{hWinmm:x}");
+        var proc = GetProcAddress(hWinmm, "timeGetTime");
+        if (proc != IntPtr.Zero)
+        {
+            var timeGetTime = Marshal.GetDelegateForFunctionPointer<TimeGetTimeDelegate>(proc);
+            Console.WriteLine($"[winmm] timeGetTime() = {timeGetTime()}");
+        }
+        else
+        {
+            Console.WriteLine("[winmm] GetProcAddress(timeGetTime) failed");
+        }
+    }
+    else
+    {
+        Console.WriteLine("[winmm] LoadLibrary failed");
+    }
+}
+else
+{
+    Console.WriteLine($"[winmm] not found: {winmmPath}");
+}
+
+[DllImport("kernel32", CharSet = CharSet.Ansi, SetLastError = true)]
+static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+// net481 + mono 下 Silk.NET 的程序集探测（TryAdd 反射加载）不可靠，
+// 直接无条件注册 GLFW 窗口平台（RegisterPlatform 幂等）。
+#if NET481
+GlfwWindowing.RegisterPlatform();
+GlfwInput.RegisterPlatform();
+#endif
+
 // ──────────────── 背景颜色 ────────────────
 var backgroundColour = new[] { 0.1f, 0.1f, 0.1f, 1.0f };
 
@@ -74,36 +137,6 @@ ComPtr<ID3D11InputLayout> inputLayout = default;
 window.Load += OnLoad;
 window.Render += OnRender;
 window.FramebufferResize += OnFramebufferResize;
-
-// ──────────────── 启动 ModManager 入口 ────────────────
-try
-{
-    var method = typeof(StArray.ModManager.Windows.Managed).GetMethod("Entry")!;
-    var funcPtr = method.MethodHandle.GetFunctionPointer();
-    var entry = Marshal.GetDelegateForFunctionPointer<EntryDelegate>(funcPtr);
-
-    // 构建 argv：UTF-8 字符串数组
-    string modsDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "tests", "mods"));
-    Console.WriteLine($"[TestDx11] Mods directory: {modsDir}");
-
-    int argc = 1;
-    byte[] utf8 = Encoding.UTF8.GetBytes(modsDir + '\0');
-    nint pArg0 = Marshal.AllocHGlobal(utf8.Length);
-    Marshal.Copy(utf8, 0, pArg0, utf8.Length);
-
-    nint pArgv = Marshal.AllocHGlobal(IntPtr.Size * argc);
-    unsafe { ((nint*)pArgv)[0] = pArg0; }
-
-    entry(argc, pArgv);
-
-    // 释放
-    Marshal.FreeHGlobal(pArg0);
-    Marshal.FreeHGlobal(pArgv);
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[ModManager] Entry failed: {ex}");
-}
 
 // ──────────────── 运行窗口 ────────────────
 window.Run();
@@ -350,6 +383,5 @@ void OnKeyDown(IKeyboard keyboard, Key key, int scancode)
     }
 }
 
-// ──────────────── Entry 委托 ────────────────
-[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-delegate int EntryDelegate(int argc, nint argv);
+[UnmanagedFunctionPointer(CallingConvention.StdCall)]
+delegate uint TimeGetTimeDelegate();

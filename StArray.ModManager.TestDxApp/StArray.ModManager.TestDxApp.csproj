@@ -2,12 +2,18 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net481</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net481'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Silk.NET.Direct3D11" Version="2.23.0" />
@@ -15,21 +21,21 @@
     <PackageReference Include="Silk.NET.DXGI" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Direct3D.Compilers" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Input" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Input.Glfw" Version="2.23.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\StArray.ModManager.Windows\StArray.ModManager.Windows.csproj" />
-  </ItemGroup>
-
-  <Target Name="CopyNativeDll" AfterTargets="Build">
-    <ItemGroup>
-      <_NativeDlls Include="..\StArray.ModManager.Windows\bin\$(Configuration)\net10.0\StArray.ModManager.Windows.Native.dll"/>
-    </ItemGroup>
-    <Copy SourceFiles="@(_NativeDlls)"
+  <!-- net481 不走 runtimes.json 解析，NuGet 可能落位 32 位 glfw3.dll；强制使用 win-x64 原生库 -->
+  <Target Name="FixNativeGlfw" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net481'">
+    <PropertyGroup>
+      <GlfwX64Source Condition="Exists('$(NuGetPackageRoot)ultz.native.glfw\3.4.0\runtimes\win-x64\native\glfw3.dll')">$(NuGetPackageRoot)ultz.native.glfw\3.4.0\runtimes\win-x64\native\glfw3.dll</GlfwX64Source>
+      <GlfwX64Source Condition="'$(GlfwX64Source)' == '' And Exists('$(NuGetPackageRoot)opentk.redist.glfw\3.4.0.44\runtimes\win-x64\native\glfw3.dll')">$(NuGetPackageRoot)opentk.redist.glfw\3.4.0.44\runtimes\win-x64\native\glfw3.dll</GlfwX64Source>
+    </PropertyGroup>
+    <Copy SourceFiles="$(GlfwX64Source)"
           DestinationFolder="$(OutputPath)"
-          SkipUnchangedFiles="true"
-          Condition="Exists('..\StArray.ModManager.Windows\bin\$(Configuration)\net10.0\')" />
+          SkipUnchangedFiles="false"
+          Condition="'$(GlfwX64Source)' != ''" />
   </Target>
 
 </Project>

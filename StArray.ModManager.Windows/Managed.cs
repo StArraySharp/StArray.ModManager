@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using ImGuiNET;
 using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
+using StArray.ModManager.Native;
 using StArray.ModManager.Runtime;
 using StArray.ModManager.RuntimeAbstractions;
 using StArray.ModManager.Windows.UI;
@@ -20,13 +21,16 @@ public static class Managed
 
     static Managed()
     {
-        NativeLibrary.SetDllImportResolver(typeof(Managed).Assembly, ResolveDll);
-        NativeLibrary.SetDllImportResolver(typeof(ImGui).Assembly, ResolveDll);
+        // 统一走核心解析器：Native/ImGui 库句柄复用（宿主已加载）逻辑以事件接入，
+        // 系统库（kernel32、user32、d3d11 等）返回 0 交还默认解析。
+        NativeLibraryResolver.Install(typeof(Managed).Assembly);
+        NativeLibraryResolver.Install(typeof(ImGui).Assembly);
+        NativeLibraryResolver.ResolveRequested += ResolveDll;
     }
 
     private static StreamWriter? Writer = null;
 
-    private static IntPtr ResolveDll(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    private static IntPtr ResolveDll(string libraryName, System.Reflection.Assembly assembly)
     {
         // Our own Native DLL is already loaded by the host — return its handle.
         if (libraryName == NativeApi.LibraryName || libraryName == "cimgui")

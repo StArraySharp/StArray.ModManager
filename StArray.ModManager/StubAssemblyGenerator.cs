@@ -221,7 +221,7 @@ public static unsafe class StubAssemblyGenerator
         _childrenMap.Clear();
         for (int i = 1; i <= rows; i++)
         {
-            var klass = Methods.mono_class_get((_MonoImage*)image, (uint)i);
+            var klass = Methods.mono_class_get((_MonoImage*)image, 0x02000000u | (uint)i);
             if (klass == null) continue;
             var parent = MonoFunctions.MonoClassGetNestingType((nint)klass);
             if (parent != 0)
@@ -235,7 +235,7 @@ public static unsafe class StubAssemblyGenerator
 
         for (int i = 1; i <= rows; i++)
         {
-            var klass = Methods.mono_class_get((_MonoImage*)image, (uint)i);
+            var klass = Methods.mono_class_get((_MonoImage*)image, 0x02000000u | (uint)i);
             if (klass == null) continue;
             var (ns, name) = GetClassNamespaceAndName((nint)klass);
             if (string.IsNullOrEmpty(name)) continue;
@@ -304,7 +304,7 @@ public static unsafe class StubAssemblyGenerator
 
         for (int i = 1; i <= rows; i++)
         {
-            var klass = Methods.mono_class_get((_MonoImage*)image, (uint)i);
+            var klass = Methods.mono_class_get((_MonoImage*)image, 0x02000000u | (uint)i);
             if (klass == null) continue;
             if (_nestingMap.ContainsKey((nint)klass)) continue;
 

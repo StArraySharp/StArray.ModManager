@@ -5,6 +5,7 @@ using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
 using StArray.ModManager.Mono;
 using StArray.ModManager.Runtime;
+using StArray.ModManager.Runtime.Metadata;
 using StArray.ModManager.RuntimeAbstractions;
 
 namespace StArray.ModManager;
@@ -27,20 +28,7 @@ public static unsafe class AssemblyEmitter
         "System.ObjectModel", "System.Transactions", "System.Web",
         "System.Memory", "System.Buffers", "System.Runtime.CompilerServices.VisualC",
         "System.Runtime.InteropServices", "System.Runtime.Serialization",
-        "System.Threading.Tasks", "System.Threading.Thread",
-        "Mono.Security",
-        "UnityEngine.AIModule", "UnityEngine.ARModule",
-        "UnityEngine.ClothModule", "UnityEngine.GameCenterModule",
-        "UnityEngine.ImageConversionModule", "UnityEngine.InputModule",
-        "UnityEngine.JSONSerializeModule", "UnityEngine.ParticleSystemModule",
-        "UnityEngine.PerformanceReportingModule", "UnityEngine.SpriteMaskModule",
-        "UnityEngine.SpriteShapeModule", "UnityEngine.StyleSheetsModule",
-        "UnityEngine.SubstanceModule", "UnityEngine.TerrainModule",
-        "UnityEngine.TerrainPhysicsModule", "UnityEngine.TilemapModule",
-        "UnityEngine.TLSModule", "UnityEngine.UnityAnalyticsModule",
-        "UnityEngine.UnityConnectModule", "UnityEngine.UnityTestProtocolModule",
-        "UnityEngine.VehiclesModule", "UnityEngine.VideoModule",
-        "UnityEngine.WindModule",
+        "System.Threading.Tasks", "System.Threading.Thread"
     };
 
     private static readonly Dictionary<string, string> TypeMap = new(StringComparer.Ordinal)
@@ -141,7 +129,15 @@ public static unsafe class AssemblyEmitter
     public static string? GenerateToDir(string outputDir, bool asModDll = false)
     {
         // Reading enum literals boxes values, which needs the thread attached to the runtime.
+        var monoAttached = false;
         if (RuntimeManager.IsIl2Cpp) Il2CppDomain.Current?.ThreadAttach();
+        else if (RuntimeManager.IsMono)
+        {
+            // Only attach if not already on a Mono thread (e.g. Unity main thread),
+            // otherwise mono_thread_detach would detach the game's own thread.
+            monoAttached = MonoFunctions.IsMonoThreadAttached();
+            if (!monoAttached) MonoDomain.Current?.ThreadAttach();
+        }
         try
         {
             return GenerateCore(outputDir, asModDll);
@@ -149,6 +145,7 @@ public static unsafe class AssemblyEmitter
         finally
         {
             if (RuntimeManager.IsIl2Cpp) Il2CppDomain.Current?.ThreadDetach();
+            else if (RuntimeManager.IsMono && !monoAttached) MonoDomain.Current?.ThreadDetach();
         }
     }
 
@@ -174,13 +171,28 @@ public static unsafe class AssemblyEmitter
             Directory.CreateDirectory(outputDir);
 
         Logger.Info("AssemblyEmitter", $"Emitting to {outputDir}");
-
         InitReflectionHandles();
 
-        // Get all non-skipped assemblies
+        // Get all non-skipped assemblies from the Managed directory only.
+        // mono_assembly_foreach 会枚举 Mono 域内全部程序集，包括注入器运行时自身
+        // (System.Collections.Immutable、Microsoft.CodeAnalysis 等非游戏 DLL)——只收集
+        // 位于 <游戏>/Managed 下的程序集，避免处理数万个无意义类型导致原生崩溃。
+        // 仅 Debug：设置 MODMGR_NO_MANAGED_FILTER=1 可跳过 Managed 目录过滤（诊断用，
+        // 会把注入器运行时程序集也收进来，游戏中可能原生崩溃，勿用于正式环境）。
+        var noManagedFilter =
+#if DEBUG
+            Environment.GetEnvironmentVariable("MODMGR_NO_MANAGED_FILTER") == "1";
+#else
+            false;
+#endif
+        if (noManagedFilter)
+            Logger.Warn("AssemblyEmitter", "Managed filter DISABLED (MODMGR_NO_MANAGED_FILTER=1)");
         var assemblies = domain.GetAssemblies()
-            .Where(a => !string.IsNullOrEmpty(a.Name) && !SkipAssemblies.Contains(StripDll(a.Name!)))
+            .Where(a => !string.IsNullOrEmpty(a.Name)
+                        && !SkipAssemblies.Contains(StripDll(a.Name!))
+                        && (noManagedFilter || IsInManagedDir(a.Filename)))
             .ToList();
+        Logger.Info("AssemblyEmitter", $"{assemblies.Count} assemblies to collect");
 
         if (assemblies.Count == 0)
         {
@@ -198,19 +210,51 @@ public static unsafe class AssemblyEmitter
         // Phase 1: collect type metadata from all assemblies
         foreach (var asm in assemblies)
             CollectAssemblyTypes(asm);
+        Logger.Info("AssemblyEmitter", $"Phase 1 done: {_pendingTypes.Count} candidate types");
 
         // Phase 2: define all TypeBuilders (base types resolved on demand, so
         // declaration order no longer decides whether a real base type is used)
-        foreach (var klass in _pendingTypes.ToList())
-            EnsureTypeDefined(klass);
+        var pending = _pendingTypes.ToList();
+        for (int i = 0; i < pending.Count; i++)
+        {
+            try
+            {
+                EnsureTypeDefined(pending[i]);
+            }
+            catch (Exception ex)
+            {
+                // 单个类型定义失败不应中断整个流程；记录后继续
+                Logger.Warn("AssemblyEmitter", $"EnsureTypeDefined failed ({i}): {ex.Message}");
+            }
+        }
+        Logger.Info("AssemblyEmitter", $"Phase 2 done: {_typeBuilders.Count} TypeBuilders");
 
         // Phase 2.5: wire up interfaces once every TypeBuilder exists
-        foreach (var (klass, tb) in _typeBuilders.ToList())
-            AddInterfaces(tb, klass);
+        var builders = _typeBuilders.ToList();
+        for (int i = 0; i < builders.Count; i++)
+        {
+            try
+            {
+                AddInterfaces(builders[i].Value, builders[i].Key);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("AssemblyEmitter", $"AddInterfaces failed ({i}): {ex.Message}");
+            }
+        }
 
         // Phase 3: emit method bodies for all types
-        foreach (var (klass, tb) in _typeBuilders.ToList())
-            EmitTypeBody(tb, klass);
+        for (int i = 0; i < builders.Count; i++)
+        {
+            try
+            {
+                EmitTypeBody(builders[i].Value, builders[i].Key);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("AssemblyEmitter", $"EmitTypeBody failed ({i}): {ex.Message}");
+            }
+        }
 
         // Commit: nested types before their declaring type, base types before subclasses
         foreach (var tb in BuildCreationOrder())
@@ -362,12 +406,26 @@ public static unsafe class AssemblyEmitter
         _usedTypeNames.Clear();
         _nameChainCache.Clear();
         _enumUnderlying.Clear();
+        _provider = null; // 下次生成重新按后端构造
         ResolvedTypes.Clear();
     }
 
     /// <summary>Bare name, for matching against <see cref="SkipAssemblies"/>.</summary>
     private static string StripDll(string name) =>
         name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+
+    /// <summary>
+    /// True if the assembly was loaded from the game's <c>Managed</c> directory.
+    /// Injects its own runtime assemblies (BepInEx/doorstop etc.) are loaded from other
+    /// directories and must be excluded from stub generation.
+    /// </summary>
+    private static bool IsInManagedDir(string? filename)
+    {
+        if (string.IsNullOrEmpty(filename)) return false;
+        var dir = Path.GetDirectoryName(filename);
+        return !string.IsNullOrEmpty(dir) &&
+               string.Equals(Path.GetFileName(dir), "Managed", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Name as the runtime wants it. Both backends resolve assemblies through
@@ -380,86 +438,27 @@ public static unsafe class AssemblyEmitter
 
     // ── Collection ──
 
+    private static IRuntimeMetadataProvider? _provider;
+
+    /// <summary>当前元数据提供者（GenerateToDir 期间非空）。</summary>
+    private static IRuntimeMetadataProvider Provider =>
+        _provider ??= RuntimeManager.IsIl2Cpp
+            ? new Il2CppMetadataProvider()
+            : new MonoMetadataProvider();
+
     private static void CollectAssemblyTypes(IRuntimeAssembly asm)
     {
-        if (RuntimeManager.IsIl2Cpp)
-            CollectIl2CppTypes((Il2CppAssembly)asm);
-        else if (RuntimeManager.IsMono)
-            CollectMonoTypes((MonoAssembly)asm);
-    }
-
-    private static void CollectIl2CppTypes(Il2CppAssembly asm)
-    {
-        var image = Il2CppFunctions.il2cpp_assembly_get_image(asm.Ptr);
-        if (image == 0) return;
         var asmName = WithDll(asm.Name ?? "");
-        var classCount = Il2CppFunctions.il2cpp_image_get_class_count(image);
-
-        var nameToPtr = new Dictionary<string, nint>(StringComparer.Ordinal);
-        var classes = new List<nint>((int)classCount);
-        for (uint i = 0; i < classCount; i++)
+        foreach (var (typePtr, identity, nestingParent) in Provider.CollectTypes(asm.Ptr))
         {
-            var klass = Il2CppFunctions.il2cpp_image_get_class(image, i);
-            if (klass == 0) continue;
-            classes.Add(klass);
-            var cname = Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_class_get_name(klass)) ?? "";
-            nameToPtr[cname] = klass;
+            if (nestingParent != 0 && nestingParent != typePtr && !_nestingMap.ContainsKey(typePtr))
+                LinkNesting(typePtr, nestingParent);
+            RegisterCandidate(typePtr, asmName);
         }
-
-        // Nesting relationships must be complete before any name chain is computed.
-        foreach (var klass in classes)
-        {
-            var iter = IntPtr.Zero;
-            while (true)
-            {
-                var nested = Il2CppFunctions.il2cpp_class_get_nested_types(klass, ref iter);
-                if (nested == 0) break;
-                if (nested != klass && !_nestingMap.ContainsKey(nested))
-                    LinkNesting(nested, klass);
-            }
-
-            var className = Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_class_get_name(klass)) ?? "";
-            if (className.Contains('+') && !_nestingMap.ContainsKey(klass))
-            {
-                var parts = className.Split('+');
-                var parentName = string.Join("+", parts, 0, parts.Length - 1);
-                if (nameToPtr.TryGetValue(parentName, out var parentPtr) && parentPtr != klass)
-                    LinkNesting(klass, parentPtr);
-            }
-        }
-
-        foreach (var klass in classes)
-            RegisterCandidate(klass, asmName);
     }
 
-    private static void CollectMonoTypes(MonoAssembly asm)
-    {
-        var image = MonoFunctions.MonoAssemblyGetImage(asm.Ptr);
-        if (image == 0) return;
-        var asmName = WithDll(asm.Name ?? "");
-        var table = Methods.mono_image_get_table_info((_MonoImage*)image,
-            (int)MonoMetaTableEnum.MONO_TABLE_TYPEDEF);
-        if (table == null) return;
-        var rows = Methods.mono_table_info_get_rows(table);
-
-        var classes = new List<nint>(rows);
-        for (int i = 1; i <= rows; i++)
-        {
-            var klass = Methods.mono_class_get((_MonoImage*)image, (uint)i);
-            if (klass == null) continue;
-            classes.Add((nint)klass);
-        }
-
-        foreach (var klass in classes)
-        {
-            var parent = MonoFunctions.MonoClassGetNestingType(klass);
-            if (parent != 0 && parent != klass && !_nestingMap.ContainsKey(klass))
-                LinkNesting(klass, parent);
-        }
-
-        foreach (var klass in classes)
-            RegisterCandidate(klass, asmName);
-    }
+    // 按后端分叉的类型收集已迁移至 Runtime/Metadata/{Mono,Il2Cpp}MetadataProvider：
+    // 崩溃防护（收集期快照、未知指针拦截、literal 原始读取）集中在实现里。
 
     private static void LinkNesting(nint nested, nint outer)
     {
@@ -471,10 +470,17 @@ public static unsafe class AssemblyEmitter
 
     private static void RegisterCandidate(nint klass, string asmName)
     {
-        var (ns, name) = GetClassNamespaceAndName(klass);
-        if (string.IsNullOrEmpty(name)) return;
-
+        // 先登记再取名：IsCollectedClass 防护依赖 _asmOfType——若取名在前，
+        // 首次调用会因尚未登记而返回空名，导致类型被永远跳过。
         _asmOfType.TryAdd(klass, asmName);
+
+        var (ns, name) = GetClassNamespaceAndName(klass);
+        if (string.IsNullOrEmpty(name))
+        {
+            _asmOfType.Remove(klass);
+            return;
+        }
+
         _pendingTypes.Add(klass);
 
         var safeNs = SanitizeNamespace(ns);
@@ -484,8 +490,17 @@ public static unsafe class AssemblyEmitter
 
     // ── Class name helpers ──
 
+    /// <summary>
+    /// 防护：Phase 3 解析方法签名时可能遇到 Phase 1 未收集的类型指针（其他目录的
+    /// 程序集、泛型实例等）。对这些未知指针调 mono_class_get_name/nesting_type 等
+    /// 会触发 0xC0000005 访问违例（无法 catch），所以只在收集过的类型上取元数据。
+    /// </summary>
+    private static bool IsCollectedClass(nint klassPtr)
+        => RuntimeManager.IsIl2Cpp || _asmOfType.ContainsKey(klassPtr);
+
     private static string GetRawClassName(nint klassPtr)
     {
+        if (!IsCollectedClass(klassPtr)) return "";
         if (RuntimeManager.IsIl2Cpp)
             return Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_class_get_name(klassPtr)) ?? "";
         if (RuntimeManager.IsMono)
@@ -495,6 +510,7 @@ public static unsafe class AssemblyEmitter
 
     private static string GetRawNamespace(nint klassPtr)
     {
+        if (!IsCollectedClass(klassPtr)) return "";
         if (RuntimeManager.IsIl2Cpp)
             return Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_class_get_namespace(klassPtr)) ?? "";
         if (RuntimeManager.IsMono)
@@ -505,7 +521,9 @@ public static unsafe class AssemblyEmitter
     private static nint GetNestingParent(nint klassPtr)
     {
         if (_nestingMap.TryGetValue(klassPtr, out var outer)) return outer;
-        if (RuntimeManager.IsMono) return MonoFunctions.MonoClassGetNestingType(klassPtr);
+        // 只在 Phase 1 收集过的类型上查嵌套：未知指针会导致原生访问违例（见 IsCollectedClass）。
+        if (RuntimeManager.IsMono && IsCollectedClass(klassPtr))
+            return MonoFunctions.MonoClassGetNestingType(klassPtr);
         return 0;
     }
 
@@ -595,6 +613,8 @@ public static unsafe class AssemblyEmitter
 
             // Enums become real managed enums when their members can be read; otherwise they
             // fall through and are emitted as an ordinary wrapper class.
+            // 嵌套枚举降级已解除：provider 在收集期完成字段快照，不再重入
+            // mono_class_get_fields 迭代器（当年崩溃根因）。
             if (IsEnumClass(klassPtr))
             {
                 var enumTb = TryDefineEnum(klassPtr, parentTb, ns, simpleName);
@@ -705,12 +725,7 @@ public static unsafe class AssemblyEmitter
         }
     }
 
-    private static nint GetParentClass(nint klassPtr)
-    {
-        if (RuntimeManager.IsIl2Cpp) return Il2CppFunctions.il2cpp_class_get_parent(klassPtr);
-        if (RuntimeManager.IsMono) return MonoFunctions.MonoClassGetParent(klassPtr);
-        return 0;
-    }
+    private static nint GetParentClass(nint klassPtr) => Provider.GetParentClass(klassPtr);
 
     private static void AddInterfaces(TypeBuilder tb, nint klassPtr)
     {
@@ -723,19 +738,7 @@ public static unsafe class AssemblyEmitter
     }
 
     private static IEnumerable<nint> EnumerateInterfaces(nint klassPtr)
-    {
-        if (RuntimeManager.IsIl2Cpp)
-        {
-            nint iter = 0;
-            while (true)
-            {
-                var iface = Il2CppFunctions.il2cpp_class_get_interfaces(klassPtr, ref iter);
-                if (iface == 0) break;
-                yield return iface;
-            }
-        }
-        // Mono interface enumeration is not available through the current bindings.
-    }
+        => Provider.EnumerateInterfaces(klassPtr);
 
     /// <summary>All interface methods a concrete type must expose, keyed by "name|paramCount".</summary>
     private static HashSet<string> CollectInterfaceMethodKeys(nint klassPtr)
@@ -1015,8 +1018,23 @@ public static unsafe class AssemblyEmitter
     /// otherwise collide, so a numeric suffix is appended; the runtime lookup string
     /// emitted into the body still uses the original name.
     /// </summary>
-    private static string? ReserveMethod(TypeCtx ctx, string desiredName, Type[] paramTypes)
+    private static string? ReserveMethod(TypeCtx ctx, string desiredName, Type[] paramTypes, Type? returnType = null)
     {
+        // 运算符/转换重载（op_Explicit 等同名不同返回类型）的判重必须纳入返回类型，
+        // 否则第二个转换会被改名 op_Explicit_2，C# 编译器不再认作转换运算符。
+        if (IsOperatorName(desiredName) && returnType != null)
+        {
+            if (ctx.MethodSigs.Add(SigKey(desiredName, paramTypes) + ":" + returnType.FullName))
+                return desiredName;
+            for (int i = 2; i < 64; i++)
+            {
+                var candidate = $"{desiredName}_{i}";
+                if (ctx.MethodSigs.Add(SigKey(candidate, paramTypes) + ":" + returnType.FullName))
+                    return candidate;
+            }
+            return null;
+        }
+
         if (ctx.MethodSigs.Add(SigKey(desiredName, paramTypes))) return desiredName;
         for (int i = 2; i < 64; i++)
         {
@@ -1025,6 +1043,9 @@ public static unsafe class AssemblyEmitter
         }
         return null;
     }
+
+    /// <summary>ECMA-335 运算符方法名（决定 specialname 与判重策略）。</summary>
+    private static bool IsOperatorName(string name) => name.StartsWith("op_", StringComparison.Ordinal);
 
     private static string? ReserveMember(TypeCtx ctx, string desiredName)
     {
@@ -1113,13 +1134,19 @@ public static unsafe class AssemblyEmitter
         {
             var paramTypes = ResolveParams(m, isIl2cpp);
             var returnType = ResolveReturn(m, isIl2cpp);
-            var name = ReserveMethod(ctx, SanitizeMemberName(m.name), paramTypes);
+            var name = ReserveMethod(ctx, SanitizeMemberName(m.name), paramTypes, returnType);
             if (name == null) continue;
 
             var access = MethodAttributes.Public | MethodAttributes.HideBySig;
             if (m.isStatic) access |= MethodAttributes.Static;
             else if (ctx.InterfaceKeys.Contains($"{m.name}|{m.paramTypes.Length}"))
                 access |= MethodAttributes.Virtual | MethodAttributes.NewSlot | MethodAttributes.Final;
+
+            // 运算符/转换重载（op_Addition、op_Explicit、op_Implicit、op_Equality…）：
+            // ECMA-335 要求带 specialname 标志，C# 编译器据此把 stub 里的
+            // `a + b` / `(int)a` / 隐式转换解析到这些方法上。
+            if (name.StartsWith("op_", StringComparison.Ordinal) && m.isStatic)
+                access |= MethodAttributes.SpecialName;
 
             var mb = tb.DefineMethod(name, access, returnType, paramTypes);
             AnnotateMethod(mb, returnType, paramTypes, m);
@@ -1661,14 +1688,7 @@ public static unsafe class AssemblyEmitter
 
     // ── Metadata helpers ──
 
-    private static bool IsInterface(nint klassPtr)
-    {
-        if (RuntimeManager.IsIl2Cpp)
-            return Il2CppFunctions.il2cpp_class_is_interface(klassPtr);
-        if (RuntimeManager.IsMono)
-            return (MonoFunctions.MonoClassGetFlags(klassPtr) & 0x20) != 0;
-        return true;
-    }
+    private static bool IsInterface(nint klassPtr) => Provider.IsInterface(klassPtr);
 
     private static bool IsGeneric(nint klassPtr)
     {
@@ -1689,106 +1709,46 @@ public static unsafe class AssemblyEmitter
         nint retTypePtr, nint[] paramTypePtrs,
         string rawReturnType, string[] rawParamTypes);
 
+    private readonly record struct FieldMeta(
+        string name, bool isStatic, string typeName, nint typePtr,
+        string rawTypeName, nint fieldPtr, uint flags)
+    {
+        private const uint FieldLiteral = 0x40;
+        public bool IsLiteral => (flags & FieldLiteral) != 0;
+    }
+
+    /// <summary>Adapter：provider 快照 → emitter 的 MethodMeta（此处做 stub 类型名解析）。</summary>
     private static IEnumerable<MethodMeta> EnumerateMethods(nint klassPtr)
     {
-        if (RuntimeManager.IsIl2Cpp) return EnumerateIl2CppMethods(klassPtr);
-        if (RuntimeManager.IsMono) return EnumerateMonoMethods(klassPtr);
-        return [];
-    }
-
-    private static IEnumerable<MethodMeta> EnumerateIl2CppMethods(nint klassPtr)
-    {
-        nint iter = 0;
-        while (true)
+        var il2cpp = RuntimeManager.IsIl2Cpp;
+        foreach (var s in Provider.EnumerateMethods(klassPtr))
         {
-            var m = Il2CppFunctions.il2cpp_class_get_methods(klassPtr, ref iter);
-            if (m == 0) break;
-
-            var name = Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_method_get_name(m)) ?? "";
-            if (name.Length == 0 || name.StartsWith('.') || name.StartsWith('<')) continue;
-
-            uint pc = Il2CppFunctions.il2cpp_method_get_param_count(m);
-            uint flagsDummy = 0;
-            uint flags = Il2CppFunctions.il2cpp_method_get_flags(m, ref flagsDummy);
-            bool isStatic = (flags & 0x10) != 0;
-
-            var retType = "void";
-            var rawRet = "";
-            var retTypePtr = Il2CppFunctions.il2cpp_method_get_return_type(m);
-            if (retTypePtr != 0)
-            {
-                rawRet = Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_type_get_name(retTypePtr)) ?? "";
-                retType = ResolveTypeName(retTypePtr, rawRet, true);
-            }
-
-            var paramTypes = new string[pc];
-            var paramTypePtrs = new nint[pc];
-            var rawParams = new string[pc];
-            for (uint i = 0; i < pc; i++)
-            {
-                var p = Il2CppFunctions.il2cpp_method_get_param(m, i);
-                paramTypePtrs[i] = p;
-                rawParams[i] = p != 0
-                    ? Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_type_get_name(p)) ?? ""
-                    : "";
-                paramTypes[i] = p != 0 ? ResolveTypeName(p, rawParams[i], true) : "nint";
-            }
-
-            yield return new MethodMeta(name, retType, paramTypes, isStatic, retTypePtr, paramTypePtrs,
-                rawRet, rawParams);
+            var retType = s.RetTypePtr != 0
+                ? ResolveTypeName(s.RetTypePtr, s.RawReturnTypeName, il2cpp)
+                : "void";
+            var paramTypes = new string[s.ParamTypePtrs.Length];
+            for (int i = 0; i < s.ParamTypePtrs.Length; i++)
+                paramTypes[i] = s.ParamTypePtrs[i] != 0
+                    ? ResolveTypeName(s.ParamTypePtrs[i], s.RawParamTypeNames[i], il2cpp)
+                    : "nint";
+            yield return new MethodMeta(s.Name, retType, paramTypes, s.IsStatic,
+                s.RetTypePtr, s.ParamTypePtrs, s.RawReturnTypeName, s.RawParamTypeNames);
         }
     }
 
-    private static IEnumerable<MethodMeta> EnumerateMonoMethods(nint klassPtr)
+    /// <summary>Adapter：provider 快照 → emitter 的 FieldMeta（此处做 stub 类型名解析）。</summary>
+    private static IEnumerable<FieldMeta> EnumerateFields(nint klassPtr)
     {
-        nint iter = 0;
-        while (true)
+        var il2cpp = RuntimeManager.IsIl2Cpp;
+        foreach (var s in Provider.EnumerateFields(klassPtr))
         {
-            var m = MonoFunctions.MonoClassGetMethods(klassPtr, ref iter);
-            if (m == 0) break;
-
-            var name = MonoFunctions.MonoMethodGetName(m);
-            if (string.IsNullOrEmpty(name) || name.StartsWith('.') || name.StartsWith('<')) continue;
-
-            var sig = MonoFunctions.MonoMethodSignature(m);
-            if (sig == 0) continue;
-
-            uint pc = MonoFunctions.MonoSignatureGetParamCount(sig);
-            uint flags = MonoFunctions.MonoMethodGetFlags(m);
-            bool isStatic = (flags & 0x10) != 0;
-
-            var retType = "void";
-            var rawRet = "";
-            var retTypePtr = MonoFunctions.MonoSignatureGetReturnType(sig);
-            if (retTypePtr != 0)
-            {
-                rawRet = MonoFunctions.MonoTypeGetName(retTypePtr) ?? "";
-                retType = ResolveTypeName(retTypePtr, rawRet, false);
-            }
-
-            var paramTypes = new string[pc];
-            var paramTypePtrs = new nint[pc];
-            var rawParams = new string[pc];
-            GetMonoMethodParamTypes(sig, pc, paramTypes, paramTypePtrs, rawParams);
-
-            yield return new MethodMeta(name, retType, paramTypes, isStatic, retTypePtr, paramTypePtrs,
-                rawRet, rawParams);
+            var typeName = "nint";
+            if (s.TypePtr != 0 && s.RawTypeName.Length > 0)
+                typeName = ResolveTypeName(s.TypePtr, s.RawTypeName, il2cpp);
+            yield return new FieldMeta(s.Name, s.IsStatic, typeName, s.TypePtr,
+                s.RawTypeName, s.FieldPtr, s.Flags);
         }
     }
-
-    private static void GetMonoMethodParamTypes(nint sig, uint count,
-        string[] typesOut, nint[] ptrsOut, string[] rawOut)
-    {
-        void* iter = null;
-        for (uint i = 0; i < count; i++)
-        {
-            var pt = MonoFunctions.MonoSignatureGetParams(sig, ref iter);
-            ptrsOut[i] = pt;
-            rawOut[i] = pt != 0 ? MonoFunctions.MonoTypeGetName(pt) ?? "" : "";
-            typesOut[i] = pt != 0 ? ResolveTypeName(pt, rawOut[i], false) : "nint";
-        }
-    }
-
     private static string ResolveTypeName(nint typePtr, string rawTypeName, bool il2cpp)
     {
         if (typePtr == 0 || string.IsNullOrEmpty(rawTypeName)) return "nint";
@@ -1844,82 +1804,10 @@ public static unsafe class AssemblyEmitter
         return mapped != "nint" ? mapped : null;
     }
 
-    private readonly record struct FieldMeta(string name, bool isStatic, string typeName, nint typePtr,
-        string rawTypeName, nint fieldPtr, uint flags)
-    {
-        private const uint FieldLiteral = 0x40;
-        public bool IsLiteral => (flags & FieldLiteral) != 0;
-    }
-
-    private static IEnumerable<FieldMeta> EnumerateFields(nint klassPtr)
-    {
-        if (RuntimeManager.IsIl2Cpp) return EnumerateIl2CppFields(klassPtr);
-        if (RuntimeManager.IsMono) return EnumerateMonoFields(klassPtr);
-        return [];
-    }
-
-    private static IEnumerable<FieldMeta> EnumerateIl2CppFields(nint klassPtr)
-    {
-        nint iter = 0;
-        while (true)
-        {
-            var f = Il2CppFunctions.il2cpp_class_get_fields(klassPtr, ref iter);
-            if (f == 0) break;
-
-            var name = Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_field_get_name(f)) ?? "";
-            if (name.Length == 0) continue;
-
-            var flags = Il2CppFunctions.il2cpp_field_get_flags(f);
-            bool isStatic = (flags & 0x10) != 0;
-
-            var typeName = "nint";
-            var raw = "";
-            var typePtr = Il2CppFunctions.il2cpp_field_get_type(f);
-            if (typePtr != 0)
-            {
-                raw = Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_type_get_name(typePtr)) ?? "";
-                typeName = ResolveTypeName(typePtr, raw, true);
-            }
-
-            yield return new FieldMeta(name, isStatic, typeName, typePtr, raw, f, (uint)flags);
-        }
-    }
-
-    private static IEnumerable<FieldMeta> EnumerateMonoFields(nint klassPtr)
-    {
-        nint iter = 0;
-        while (true)
-        {
-            var f = MonoFunctions.MonoClassGetFields(klassPtr, ref iter);
-            if (f == 0) break;
-
-            var name = MonoFunctions.MonoFieldGetName(f);
-            if (string.IsNullOrEmpty(name)) continue;
-
-            var flags = MonoFunctions.MonoFieldGetFlags(f);
-            bool isStatic = (flags & 0x10) != 0;
-
-            var typeName = "nint";
-            var raw = "";
-            var typePtr = MonoFunctions.MonoFieldGetType(f);
-            if (typePtr != 0)
-            {
-                raw = MonoFunctions.MonoTypeGetName(typePtr) ?? "";
-                typeName = ResolveTypeName(typePtr, raw, false);
-            }
-
-            yield return new FieldMeta(name, isStatic, typeName, typePtr, raw, f, flags);
-        }
-    }
 
     // ── Enums ──
 
-    private static bool IsEnumClass(nint klassPtr)
-    {
-        if (RuntimeManager.IsIl2Cpp) return Il2CppFunctions.il2cpp_class_is_enum(klassPtr);
-        if (RuntimeManager.IsMono) return MonoFunctions.MonoClassIsEnum(klassPtr);
-        return false;
-    }
+    private static bool IsEnumClass(nint klassPtr) => Provider.IsEnum(klassPtr);
 
     private static bool IsIntegralPrimitive(Type t) =>
         t == typeof(byte) || t == typeof(sbyte) || t == typeof(short) || t == typeof(ushort) ||
@@ -1946,55 +1834,10 @@ public static unsafe class AssemblyEmitter
     /// populated enum would silently report wrong values, so the type stays a plain class instead.
     /// </summary>
     private static List<(string name, object value)>? ReadEnumMembers(nint klassPtr, Type underlying)
-    {
-        var members = new List<(string, object)>();
-        foreach (var f in EnumerateFields(klassPtr))
-        {
-            if (!f.isStatic || !f.IsLiteral || f.name.Length == 0) continue;
-            var value = ReadLiteralValue(f.fieldPtr, underlying);
-            if (value == null) return null;
-            members.Add((f.name, value));
-        }
-        return members;
-    }
+        => Provider.ReadEnumMembers(klassPtr, underlying);
 
-    private static object? ReadLiteralValue(nint fieldPtr, Type underlying)
-    {
-        if (fieldPtr == 0) return null;
-
-        nint boxed;
-        if (RuntimeManager.IsIl2Cpp)
-        {
-            boxed = Il2CppFunctions.il2cpp_field_get_value_object(fieldPtr, 0);
-        }
-        else if (RuntimeManager.IsMono)
-        {
-            var domain = MonoFunctions.MonoGetRootDomain();
-            if (domain == 0) return null;
-            boxed = (nint)Methods.mono_field_get_value_object(
-                (_MonoDomain*)domain, (_MonoClassField*)fieldPtr, null);
-        }
-        else return null;
-
-        if (boxed == 0) return null;
-
-        var p = RuntimeManager.IsIl2Cpp
-            ? Il2CppFunctions.il2cpp_object_unbox(boxed)
-            : MonoFunctions.MonoObjectUnbox(boxed);
-        if (p == 0) return null;
-
-        if (underlying == typeof(int)) return *(int*)p;
-        if (underlying == typeof(uint)) return *(uint*)p;
-        if (underlying == typeof(byte)) return *(byte*)p;
-        if (underlying == typeof(sbyte)) return *(sbyte*)p;
-        if (underlying == typeof(short)) return *(short*)p;
-        if (underlying == typeof(ushort)) return *(ushort*)p;
-        if (underlying == typeof(long)) return *(long*)p;
-        if (underlying == typeof(ulong)) return *(ulong*)p;
-        if (underlying == typeof(char)) return *(char*)p;
-        if (underlying == typeof(bool)) return *(bool*)p;
-        return null;
-    }
+    // ReadLiteralValue 已并入 MonoMetadataProvider.ReadEnumMembers（mono_field_get_data
+    // 原始字节路径）与 Il2CppMetadataProvider（装箱 unbox 路径）。
 
     /// <summary>Defines a real managed enum. Returns null when the metadata was not usable.</summary>
     private static TypeBuilder? TryDefineEnum(nint klassPtr, TypeBuilder? parentTb,

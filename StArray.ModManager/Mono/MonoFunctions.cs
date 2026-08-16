@@ -1,15 +1,67 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using StArray.ModManager.Native;
 
 namespace StArray.ModManager.Mono;
 
 /// <summary>
 /// Mono Runtime P/Invoke 封装 —— 将 Methods 类的 unsafe 指针 API
-/// 包装为与 Il2CppFunctions 一致的 nint/IntPtr 风格。
+/// 包装为与 Il2CppFunctions 一致的 nint/IntPtr 长度风格。
 /// </summary>
 public unsafe class MonoFunctions
 {
+    // ====================================================================
+    //  Library Redirection
+    // ====================================================================
+
+    private const string LibraryPlaceholder = "MONO_LIBRARY_NAME";
+
+    private static readonly Lock _resolverLock = new();
+    private static string? _libraryPath;
+    private static nint _libraryHandle;
+    private static bool _resolverHooked;
+
+    /// <summary>
+    /// 指定 mono 宿主库路径（如游戏嵌入的 mono-2.0-bdwgc.dll、MSYS2 的
+    /// libmonosgen-2.0.dll）。可安全重复调用：内部通过
+    /// <see cref="NativeLibraryResolver"/>（每程序集一次注册）转发，
+    /// 传入新路径会使下一次解析重新加载。
+    /// </summary>
+    public static void SetMonoLibraryPath(string path)
+    {
+        lock (_resolverLock)
+        {
+            if (!string.Equals(_libraryPath, path, StringComparison.Ordinal))
+            {
+                _libraryPath = path;
+                _libraryHandle = 0; // 促使下次解析重新加载
+            }
+
+            if (_resolverHooked) return;
+            NativeLibraryResolver.Install(typeof(MonoFunctions).Assembly);
+            NativeLibraryResolver.ResolveRequested += ResolveMonoLibrary;
+            _resolverHooked = true;
+        }
+    }
+
+    private static nint ResolveMonoLibrary(string libraryName, System.Reflection.Assembly assembly)
+    {
+        if (libraryName != LibraryPlaceholder) return 0;
+
+        lock (_resolverLock)
+        {
+            if (_libraryHandle != 0) return _libraryHandle;
+            if (string.IsNullOrEmpty(_libraryPath)) return 0;
+
+            // 已在进程内加载的库（GetModuleHandle/dlopen 探测）优先复用句柄，
+            // 避免 LoadLibrary 重复映射；失败返回 0 交还默认解析。
+            if (NativeLibrary.TryLoad(_libraryPath, out var handle))
+                _libraryHandle = handle;
+            return _libraryHandle;
+        }
+    }
+
     // ====================================================================
     //  JIT / Domain
     // ====================================================================
@@ -38,6 +90,27 @@ public unsafe class MonoFunctions
 
     public static nint MonoDomainGet()
         => (nint)Methods.mono_domain_get();
+
+    /// <summary>
+    /// 当前线程是否已附加到 Mono 运行时（即 `mono_thread_current() != NULL`）。
+    /// </summary>
+    /// <remarks>
+    /// Unity 内嵌 mono 对未 attach 的线程调用 mono_thread_current 会直接抛 SEH
+    /// （0x80004005）而非返回 NULL——测试宿主（独占 mono）不会暴露此差异。
+    /// 所以这里必须防御性捕获：探测失败一律视作"未附加"，交给调用方 attach。
+    /// mono_thread_attach 对这种线程才是正确的注册协议。
+    /// </remarks>
+    public static bool IsMonoThreadAttached()
+    {
+        try
+        {
+            return Methods.mono_thread_current() != null;
+        }
+        catch (Exception ex) when (ex is SEHException or AccessViolationException)
+        {
+            return false;
+        }
+    }
 
     public static nint MonoDomainSet(nint domain, bool force)
         => (nint)Methods.mono_domain_set((_MonoDomain*)domain, force ? 1 : 0);
@@ -394,6 +467,13 @@ public unsafe class MonoFunctions
 
     public static nint MonoFieldGetParent(nint field)
         => (nint)Methods.mono_field_get_parent((_MonoClassField*)field);
+
+    /// <summary>
+    /// 字段数据指针。对 static literal（const）字段，直接指向 metadata 中的常量原始值——
+    /// 不装箱、不初始化类，比 mono_field_get_value_object 安全得多。
+    /// </summary>
+    public static nint MonoFieldGetData(nint field)
+        => (nint)Methods.mono_field_get_data((_MonoClassField*)field);
 
     public static uint MonoFieldGetOffset(nint field)
         => Methods.mono_field_get_offset((_MonoClassField*)field);

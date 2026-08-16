@@ -646,13 +646,12 @@ public unsafe class Il2CppFunctions
     private static readonly object _resolverLock = new();
     private static string? _libraryPath;
     private static IntPtr _libraryHandle;
-    private static bool _resolverRegistered;
+    private static bool _resolverHooked;
 
     /// <summary>
-    /// 指定 il2cpp 宿主库路径。可安全地重复调用：
-    /// <see cref="NativeLibrary.SetDllImportResolver"/> 对同一程序集只允许注册一次
-    /// （再次注册会抛 <see cref="InvalidOperationException"/>），因此这里只注册一次，
-    /// 由解析器读取最新路径。传入新路径会让下次解析重新加载。
+    /// 指定 il2cpp 宿主库路径。可安全地重复调用：内部通过
+    /// <see cref="Native.NativeLibraryResolver"/>（每程序集一次注册、事件转发）解析，
+    /// 传入新路径会让下次解析重新加载。
     /// </summary>
     public static void SetIl2CppLibraryPath(string path)
     {
@@ -664,14 +663,14 @@ public unsafe class Il2CppFunctions
                 _libraryHandle = IntPtr.Zero;
             }
 
-            if (_resolverRegistered) return;
-            NativeLibrary.SetDllImportResolver(typeof(Il2CppFunctions).Assembly, ResolveLibrary);
-            _resolverRegistered = true;
+            if (_resolverHooked) return;
+            Native.NativeLibraryResolver.Install(typeof(Il2CppFunctions).Assembly);
+            Native.NativeLibraryResolver.ResolveRequested += ResolveLibrary;
+            _resolverHooked = true;
         }
     }
 
-    private static IntPtr ResolveLibrary(string libraryName, System.Reflection.Assembly assembly,
-        DllImportSearchPath? searchPath)
+    private static IntPtr ResolveLibrary(string libraryName, System.Reflection.Assembly assembly)
     {
         // 其他库名交还默认解析流程，别影响同程序集里的其它 P/Invoke
         if (libraryName != LibraryPlaceholder) return IntPtr.Zero;

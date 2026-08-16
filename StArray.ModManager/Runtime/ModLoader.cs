@@ -119,7 +119,9 @@ public class ModLoader
 
         try
         {
-            var assembly = Assembly.LoadFrom(entryDll);
+            // 字节加载：Assembly.LoadFrom(path) 会映射并锁定文件，导致后续重新生成
+            // mod DLL 时 IOException（旧实例还占着句柄）。从内存加载则不锁文件。
+            var assembly = Assembly.Load(File.ReadAllBytes(entryDll));
 
             var pluginType = ResolvePluginType(assembly);
             if (pluginType == null) return null;
@@ -181,7 +183,8 @@ public class ModLoader
             // 加载入口程序集
             if (!string.IsNullOrEmpty(mod.EntryPoint) && File.Exists(mod.EntryPoint))
             {
-                var assembly = Assembly.LoadFrom(mod.EntryPoint);
+                // 字节加载，避免锁定 DLL 文件（同 DiscoverMod 处的说明）
+                var assembly = Assembly.Load(File.ReadAllBytes(mod.EntryPoint));
 
                 var pluginType = ResolvePluginType(assembly);
                 if (pluginType != null)

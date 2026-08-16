@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Mono;
+using StArray.ModManager.Native;
 
 namespace StArray.ModManager.RuntimeAbstractions;
 
@@ -25,13 +26,23 @@ public static class RuntimeManager
         Backend = RuntimeBackend.None;
         if (OperatingSystem.IsWindows())
         {
-            if (File.Exists(Path.Combine(AppContext.BaseDirectory,"..","..","GameAssembly.dll")))
+            // 优先探测进程内已加载的 mono 运行时（覆盖 mono 宿主进程，
+            // 如 MSYS2 mono 的 libmonosgen-2.0.dll、游戏嵌入的 mono-2.0-bdwgc.dll）。
+            var monoLib = ProbeLoadedMonoLibrary();
+            if (monoLib != null)
+            {
+                Backend = RuntimeBackend.Mono;
+                MonoFunctions.SetMonoLibraryPath(monoLib);
+            }
+            else if (File.Exists(Path.Combine(AppContext.BaseDirectory,"..","..","GameAssembly.dll")))
             {
                 Backend = RuntimeBackend.Il2Cpp;
             }
-            if (File.Exists(Path.Combine(AppContext.BaseDirectory,"..","..","MonoBleedingEdge","EmbedRuntime","mono-2.0-bdwgc.dll")))
+            else if (File.Exists(Path.Combine(AppContext.BaseDirectory,"..","..","MonoBleedingEdge","EmbedRuntime","mono-2.0-bdwgc.dll")))
             {
                 Backend = RuntimeBackend.Mono;
+                MonoFunctions.SetMonoLibraryPath(
+                    Path.Combine(AppContext.BaseDirectory, "..", "..", "MonoBleedingEdge", "EmbedRuntime", "mono-2.0-bdwgc.dll"));
             }
         }
         else if (OperatingSystem.IsAndroid())
@@ -102,17 +113,46 @@ public static class RuntimeManager
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
 
-    [DllImport("libdl", EntryPoint = "dlopen")]
-    private static extern IntPtr dlopen(string filename, int flags);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetModuleFileNameW(IntPtr hModule,
+        [Out] System.Text.StringBuilder lpFilename, int nSize);
 
-    [DllImport("libdl", EntryPoint = "dlclose")]
-    private static extern int dlclose(IntPtr handle);
+    /// <summary>进程内已加载模块的候选 mono 库名（基名匹配，不含路径）。</summary>
+    private static readonly string[] WindowsMonoCandidates =
+    [
+        "mono-2.0-bdwgc.dll",   // Unity 嵌入式（BDWGC）
+        "mono-2.0-sgen.dll",    // Unity 嵌入式（SGen）
+        "monosgen-2.0.dll",     // MSYS2 / 独立 mono
+        "libmonosgen-2.0.dll",  // MSYS2 带前缀变体
+    ];
 
+    /// <summary>
+    /// 探测进程内已加载的 mono 运行时，返回其完整路径；未加载返回 null。
+    /// GetModuleHandle 对未加载模块仅返回零，不加载新库、无副作用。
+    /// </summary>
+    private static string? ProbeLoadedMonoLibrary()
+    {
+        foreach (var candidate in WindowsMonoCandidates)
+        {
+            var h = GetModuleHandle(candidate);
+            if (h == IntPtr.Zero) continue;
+
+            var sb = new System.Text.StringBuilder(1024);
+            return GetModuleFileNameW(h, sb, sb.Capacity) > 0 ? sb.ToString() : candidate;
+        }
+        return null;
+    }
+
+    // libdl 相关调用统一走 Native.DL（RuntimeManager 不再自带 dlopen/dlclose P/Invoke）
     internal const int RtldNow = 0x0002;
     internal const int RtldNoLoad = 0x0004;
 
     private static bool IsUnixLibraryLoaded(string filename)
-        => ProbeUnixLibrary(filename, dlopen, handle => _ = dlclose(handle));
+        => ProbeUnixLibrary(
+            filename,
+            (name, flags) => DL.Open(
+                name, (DL.RTLDFlags)(flags)), // ProbeUnixLibrary 只传 NOW|NOLOAD，直接透传
+            handle => _ = DL.Close(handle));
 
     internal static bool ProbeUnixLibrary(
         string filename,

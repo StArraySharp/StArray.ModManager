@@ -13,6 +13,9 @@ public unsafe class Il2CppAssembly : IRuntimeAssembly
     public string Name => Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_image_get_name(
         Il2CppFunctions.il2cpp_assembly_get_image(Ptr))) ?? "";
 
+    public string? Filename => Marshal.PtrToStringAnsi(Il2CppFunctions.il2cpp_image_get_filename(
+        Il2CppFunctions.il2cpp_assembly_get_image(Ptr)));
+
     public Il2CppClass? GetClass(string namespaze, string name)
     {
         var domain = Il2CppDomain.Current;

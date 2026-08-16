@@ -6,6 +6,7 @@ using StArray.ModManager.Android.Native;
 using StArray.ModManager.Android.UI;
 using StArray.ModManager.Il2Cpp;
 using StArray.ModManager.Manager;
+using StArray.ModManager.Native;
 using StArray.ModManager.Runtime;
 using StArray.ModManager.RuntimeAbstractions;
 
@@ -51,15 +52,10 @@ public static class Managed
         AssemblyPath = Path.Combine(Path.GetDirectoryName(modsPath), "manager", typeof(Managed).Namespace + ".dll");
         if (!Directory.Exists(modsPath))
             Directory.CreateDirectory(modsPath);
-        NativeLibrary.SetDllImportResolver(typeof(Il2CppFunctions).Assembly, (libraryName, assembly, searchPath) =>
-        {
-            if (libraryName.Contains("IL2CPP_LIBRARY_NAME"))
-            {
-                return Il2CppInit();
-            }
-            
-            return IntPtr.Zero;
-        });
+        // 统一库解析：Android 上 il2cpp 库由注入器预加载，直接返回其初始化句柄。
+        NativeLibraryResolver.Install(typeof(Il2CppFunctions).Assembly);
+        NativeLibraryResolver.ResolveRequested += (libraryName, assembly) =>
+            libraryName.Contains("IL2CPP_LIBRARY_NAME") ? Il2CppInit() : IntPtr.Zero;
 
         // 文件日志 → manager 根目录（与 mods/、runtime/ 同级）
         var rootDir = Path.GetDirectoryName(modsPath)!;

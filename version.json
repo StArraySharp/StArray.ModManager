@@ -1,8 +1,20 @@
 {
   "version": "1.0.6",
   "versionCode": 12,
-  "manager": "https://github.com/StArraySharp/StArray.ModManager/releases/download/1.0.6/modmanager.zip",
-  "sha256": "6776f637ce70ca6acdf2788f7690065db20c6aab15ec67b6298bacb94e493ba4",
-  "entryAssembly": "StArray.ModManager.Android.dll",
-  "entryMethod": "StArray.ModManager.Android.Managed::Entry"
+  "platforms": [
+    {
+      "name": "windows",
+      "manager": "https://github.com/StArraySharp/StArray.ModManager/releases/download/1.0.6/modmanager-windows.zip",
+      "sha256": "79209ef2bcea49049448f9eff11815b005d221fb3f44b0d7bf80fe5b7b0b99f3",
+      "entryAssembly": "StArray.ModManager.Windows.dll",
+      "entryMethod": "StArray.ModManager.Windows.Managed::Entry"
+    },
+    {
+      "name": "android",
+      "manager": "https://github.com/StArraySharp/StArray.ModManager/releases/download/1.0.6/modmanager-android.zip",
+      "sha256": "9bb1c91f641f429068dc4cddbdfbafd9b65124571d1377355daf73d9be8dedf8",
+      "entryAssembly": "StArray.ModManager.Android.dll",
+      "entryMethod": "StArray.ModManager.Android.Managed::Entry"
+    }
+  ]
 }
