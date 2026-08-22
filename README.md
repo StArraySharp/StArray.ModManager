@@ -1,5 +1,7 @@
 # StArray.ModManager
 
+English | [简体中文](README.zh-CN.md)
+
 Android IL2CPP Unity mod manager with CoreCLR runtime embedding and ImGui overlay UI.
 
 ## How It Works
@@ -123,7 +125,10 @@ Generated partial class provides `InstallHooks()` / `UninstallHooks()` with `*Or
 
 ## Build
 
-Requires .NET 10 SDK + Android NDK (cmake on PATH).
+| Platform | Requirements |
+|----------|--------------|
+| Windows | .NET 10 SDK; Visual Studio with **Desktop development with C++** (MSVC + Windows SDK) and **C++ CMake tools for Windows** (CMake + Ninja on PATH) |
+| Android | Android NDK (cmake on PATH) |
 
 ```bash
 # Windows (native + C#, one command)
@@ -131,6 +136,23 @@ dotnet build StArray.ModManager.Windows -c Release
 
 # Android
 cd Android && ./gradlew :library:assembleRelease
+```
+
+### Windows: restore the cimgui symlinks after cloning
+
+`StArray.ModManager.CImGui/` is the shared cimgui source used by both
+platforms. The Windows and Android native builds reach it through two git
+symlinks (`StArray.ModManager.Windows/Native/cimgui`,
+`Android/library/src/main/cpp/libs/cimgui`), which on Windows only materialize
+as real links with **Developer Mode** enabled (or an elevated shell) —
+otherwise they are checked out as plain text files and the CMake build fails
+with missing `cimgui` references. One-time fix after cloning:
+
+```bash
+# 1. Enable Windows Developer Mode first, then:
+git config core.symlinks true
+rm StArray.ModManager.Windows/Native/cimgui Android/library/src/main/cpp/libs/cimgui
+git checkout -- StArray.ModManager.Windows/Native/cimgui Android/library/src/main/cpp/libs/cimgui
 ```
 
 ## Windows Architecture
@@ -143,10 +165,10 @@ The native DLL (`StArray.ModManager.Windows.Native.dll`) uses
 
 | File | Backend | Init | Render |
 |------|---------|------|--------|
-| `hook_d3d12.cpp` | D3D12 | Descriptor heaps, command list, RTV per-frame contexts | Resource barriers + OMSetRenderTargets |
-| `hook_d3d11.cpp` | D3D11 | Device + Context + persistent backbuffer RTV | OMSetRenderTargets + RenderDrawData |
-| `hook_d3d9.cpp`  | D3D9  | SwapChain QI → Device | Viewport/scissor save-restore |
-| `main.cpp`       | GL/VK | Win32 init only (C# handles backend) | C# render callback only |
+| `dx12hook.cpp` | D3D12 | Descriptor heaps, command list, RTV per-frame contexts | Resource barriers + OMSetRenderTargets |
+| `dx11hook.cpp` | D3D11 | Device + Context + persistent backbuffer RTV | OMSetRenderTargets + RenderDrawData |
+| `dx9hook.cpp`  | D3D9  | SwapChain QI → Device | Viewport/scissor save-restore |
+| `main.cpp`     | GL/VK | Win32 init only (C# handles backend) | C# render callback only |
 
 **Unified dispatch** (`main.cpp` `hkPresent`):
 - All backends share `DisplaySize`, `ImGui_ImplWin32_NewFrame`, WndProc hook
@@ -158,9 +180,9 @@ flowchart LR
     CSharp[C# ImGuiRenderer] -->|P/Invoke Init| Native[Native DLL]
     Native -->|kiero2 detect| API[D3D9/11/12/GL/VK]
     API -->|MinHook| Present[hkPresent]
-    Present -->|dispatch| D3D11[hook_d3d11]
-    Present -->|dispatch| D3D12[hook_d3d12]
-    Present -->|dispatch| D3D9[hook_d3d9]
+    Present -->|dispatch| D3D11[dx11hook]
+    Present -->|dispatch| D3D12[dx12hook]
+    Present -->|dispatch| D3D9[dx9hook]
     D3D11 & D3D12 & D3D9 -->|callback| CSharp
     CSharp -->|ImGui.NET| cimgui[cimgui.dll]
 ```
@@ -175,6 +197,12 @@ flowchart LR
 
 ```bash
 git clone --recurse-submodules https://github.com/StArraySharp/StArray.ModManager.git
+```
+
+On Windows, complete the one-time cimgui symlink setup in
+[Build](#build) before running `dotnet build`, then:
+
+```bash
 dotnet build StArray.ModManager.Windows -c Release
 ```
 
