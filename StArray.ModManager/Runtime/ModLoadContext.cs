@@ -23,6 +23,10 @@ public sealed class ModLoadContext : AssemblyLoadContext
     private readonly string _baseDir;
     private readonly string? _managerDir;
 
+    /// <summary>宿主上下文（SMM 本体所在的 ALC）——其中的程序集在 mod 侧必须保持同一身份。</summary>
+    private static readonly AssemblyLoadContext HostContext =
+        AssemblyLoadContext.GetLoadContext(typeof(ModLoadContext).Assembly) ?? AssemblyLoadContext.Default;
+
     /// <summary>mod 依赖解析失败时触发（诊断用）。</summary>
     public event Action<ModLoadContext, AssemblyName>? OnResolveFailure;
 
@@ -35,7 +39,14 @@ public sealed class ModLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        // 只处理本 mod 目录内的程序集；系统/框架程序集返回 null 交给默认上下文，
+        // 1) 宿主已加载的同名程序集必须复用同一实例。
+        //    管理器目录里同样有 StArray.ModManager.dll，若直接从这里加载一份副本，
+        //    mod 看到的 IModPlugin / ModEntryPointAttribute 就变成另一份类型，
+        //    IsPluginType 恒为 false → 一个 Mod 都发现不了（Android/Windows 皆然）。
+        if (TryFindHostAssembly(assemblyName.Name, out var hostAssembly))
+            return hostAssembly;
+
+        // 2) 只处理本 mod 目录内的程序集；系统/框架程序集返回 null 交给默认上下文，
         // 保证 mscorlib/System.* 与 SMM 本体的类型一致性（IModPlugin 接口可赋值）。
         var local = ProbeDir(_baseDir, assemblyName);
         if (local != null) return local;
@@ -64,6 +75,43 @@ public sealed class ModLoadContext : AssemblyLoadContext
         {
             return null; // 加载失败交回解析链（Resolving/默认上下文）
         }
+    }
+
+    /// <summary>
+    /// 在宿主上下文（及默认上下文）中查找已加载的同名程序集。
+    /// 命中则返回该实例，<b>绝不再从磁盘加载第二份</b> —— 类型身份一致是 mod 能被识别的
+    /// 前提（<c>IModPlugin</c> 与宿主必须是同一个 Type）。
+    /// </summary>
+    private static bool TryFindHostAssembly(string? simpleName, out Assembly? assembly)
+    {
+        assembly = null;
+        if (string.IsNullOrEmpty(simpleName)) return false;
+
+        if (TryFind(HostContext, simpleName, out assembly)) return true;
+        return !ReferenceEquals(HostContext, AssemblyLoadContext.Default)
+            && TryFind(AssemblyLoadContext.Default, simpleName, out assembly);
+    }
+
+    private static bool TryFind(AssemblyLoadContext context, string simpleName, out Assembly? assembly)
+    {
+        try
+        {
+            foreach (var loaded in context.Assemblies)
+            {
+                if (string.Equals(loaded.GetName().Name, simpleName, StringComparison.OrdinalIgnoreCase))
+                {
+                    assembly = loaded;
+                    return true;
+                }
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // 上下文正在卸载，忽略
+        }
+
+        assembly = null;
+        return false;
     }
 
     protected override nint LoadUnmanagedDll(string unmanagedDllName)

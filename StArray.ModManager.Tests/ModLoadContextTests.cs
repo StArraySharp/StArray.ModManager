@@ -27,9 +27,12 @@ public sealed class ModLoadContextTests
 
     /// <summary>生成一个程序集并落盘：含一个公共类 Marker（可被实例化验证）。</summary>
     private string WriteAssembly(string fileName, string typeName = "Marker")
+        => WriteAssemblyTo(_tempDir, fileName, typeName);
+
+    private static string WriteAssemblyTo(string dir, string fileName, string typeName = "Marker")
     {
-        Directory.CreateDirectory(_tempDir);
-        var path = Path.Combine(_tempDir, fileName);
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, fileName);
 
         var ab = new PersistedAssemblyBuilder(
             new AssemblyName(Path.GetFileNameWithoutExtension(fileName)), typeof(object).Assembly);
@@ -159,8 +162,49 @@ public sealed class ModLoadContextTests
         finally { alc.Unload(); }
     }
 
-    // ── 文件锁行为（路径加载的已知权衡） ──
+    /// <summary>
+    /// 管理器目录里也存在宿主程序集的副本时，依赖解析必须复用宿主已加载的实例。
+    /// 回归用例：SMM 自身就在 manager/ 目录里，若 mod ALC 从该目录再加载一份，
+    /// mod 看到的 IModPlugin 是另一个 Type，插件识别全失败（表现为“发现 0 个 Mod”）。
+    /// </summary>
+    [Test]
+    public void HostLoadedAssembly_WinsOverManagerDirCopy()
+    {
+        var sharedName = "HostShared_" + Guid.NewGuid().ToString("N");
+        var hostDir = Path.Combine(_tempDir, "host");
+        var managerDir = Path.Combine(_tempDir, "manager");
+        var modDir = Path.Combine(_tempDir, "mod");
 
+        // 两份同名程序集：一份已在宿主上下文，一份躺在管理器目录
+        var hostPath = WriteAssemblyTo(hostDir, sharedName + ".dll", "SharedMarker");
+        WriteAssemblyTo(managerDir, sharedName + ".dll", "SharedMarker");
+
+        var hostAsm = AssemblyLoadContext.Default.LoadFromAssemblyPath(hostPath);
+        var hostMarker = hostAsm.GetType("SharedMarker")!;
+
+        // mod 的依赖 dll 引用 SharedMarker → 触发 mod ALC 的依赖解析
+        var ab = new PersistedAssemblyBuilder(new AssemblyName("DepOfShared"), typeof(object).Assembly);
+        var mb = ab.DefineDynamicModule("MainModule");
+        var tb = mb.DefineType("DepMarker", TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.Class);
+        tb.DefineField("Ref", hostMarker, FieldAttributes.Public | FieldAttributes.Static);
+        tb.CreateTypeInfo();
+        var depPath = Path.Combine(modDir, "DepOfShared.dll");
+        Directory.CreateDirectory(modDir);
+        ab.Save(depPath);
+
+        var alc = new ModLoadContext("T:HostFirst", modDir, managerDir);
+        try
+        {
+            var resolved = alc.LoadFromFilePath(depPath)
+                .GetType("DepMarker")!.GetField("Ref")!.FieldType;
+
+            Assert.That(resolved, Is.SameAs(hostMarker),
+                "宿主已加载的程序集必须复用同一实例，不能从管理器目录加载副本");
+        }
+        finally { alc.Unload(); }
+    }
+
+    // ── 文件锁行为（路径加载的已知权衡） ──
     [Test]
     public void PathLoad_HoldsFileUntilUnloadCollected()
     {

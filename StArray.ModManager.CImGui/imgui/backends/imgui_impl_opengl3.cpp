@@ -859,8 +859,12 @@ bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "    Out_Color = Frag_Color * texture(Texture, Frag_UV.st);\n"
         "}\n";
 
+    // [LOCAL PATCH] 上游此处为 "precision mediump float;"。
+    // 大图集（4096+，本项目 5 个字体合并全 BMP 就是这种情况）下 mediump(10bit 尾数) 的 UV
+    // 量化误差可达 1~2 texel，采样会越过字形留白命中相邻格子的墨迹，表现为某些字底下多出一条细线
+    // （Windows 走 D3D11 fp32 着色器，所以看不到）。ES3 片元着色器强制支持 highp，可直接改。
     const GLchar* fragment_shader_glsl_300_es =
-        "precision mediump float;\n"
+        "precision highp float;\n"
         "uniform sampler2D Texture;\n"
         "in vec2 Frag_UV;\n"
         "in vec4 Frag_Color;\n"

@@ -129,7 +129,13 @@ public class ModLoader
                 var assembly = probe.LoadMetadataFromPath(entryDll);
 
                 var pluginType = ResolvePluginType(assembly);
-                if (pluginType == null) return null;
+                if (pluginType == null)
+                {
+                    // 静默跳过会让“共发现 0 个 Mod”难以定位，这里留下原因
+                    Logger.Warn(nameof(ModLoader),
+                        $"No IModPlugin type in {Path.GetFileName(entryDll)} ({dirName}); skipped");
+                    return null;
+                }
 
                 // 实例化以读取元数据（Dependencies 允许实现返回 null —— 接口不变，这里宽容处理）
                 var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;

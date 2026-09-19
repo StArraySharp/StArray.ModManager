@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using ImGuiNET;
+using StArray.ModManager.Manager;
 
 namespace StArray.ModManager.UI;
 
@@ -85,6 +86,11 @@ public interface IImGuiRenderer
 
             // AddFontFromMemoryTTF 只保存指针，Build() 时才真正读取数据。
             io.Fonts.Build();
+
+            // 图集尺寸是 UV 精度的关键：越大的图集，GLES 上同样的相对误差对应的 texel 越多
+            // （mediump 在 4096 宽图集上约 1 texel、8192 高上约 2 texel）——记录以便核实。
+            Logger.Info("FontAtlas",
+                $"Built {io.Fonts.TexWidth}x{io.Fonts.TexHeight}, {io.Fonts.Fonts.Size} fonts");
         }
         finally
         {
