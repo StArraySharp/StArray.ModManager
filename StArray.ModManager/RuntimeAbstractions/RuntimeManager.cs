@@ -148,11 +148,7 @@ public static class RuntimeManager
     internal const int RtldNoLoad = 0x0004;
 
     private static bool IsUnixLibraryLoaded(string filename)
-        => ProbeUnixLibrary(
-            filename,
-            (name, flags) => DL.Open(
-                name, (DL.RTLDFlags)(flags)), // ProbeUnixLibrary 只传 NOW|NOLOAD，直接透传
-            handle => _ = DL.Close(handle));
+        => DL.GetBaseAddress(filename) != IntPtr.Zero;
 
     internal static bool ProbeUnixLibrary(
         string filename,
