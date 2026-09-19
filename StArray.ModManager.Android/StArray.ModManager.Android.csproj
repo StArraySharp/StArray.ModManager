@@ -25,4 +25,12 @@
     <PackageReference Include="OpenTK.Graphics" Version="4.9.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Capstone（arm64，最小化构建）内嵌为资源：DllImport("capstone") 触发解析时
+         解压到 manager/ 并经 cache 中转加载（见 CapstoneLibrary） -->
+    <EmbeddedResource Include="Resources\libcapstone.so">
+      <LogicalName>StArray.ModManager.Android.Resources.libcapstone.so</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

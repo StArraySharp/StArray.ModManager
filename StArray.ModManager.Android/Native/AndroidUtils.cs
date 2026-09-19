@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using StArray.ModManager.Native;
 
 namespace StArray.ModManager.Android.Native;
 
@@ -140,6 +141,115 @@ public static class AndroidUtils
         var context = JniNative.GetCurrentActivity();
         if (context == IntPtr.Zero) return null;
         return GetDirFromContext(context, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;", null);
+    }
+
+    /// <summary>
+    /// 获取 /data/data/{package}/cache 私有缓存目录
+    /// </summary>
+    public static string? GetCacheDir()
+    {
+        var context = JniNative.GetCurrentActivity();
+        if (context == IntPtr.Zero) return null;
+        return GetDirFromContext(context, "getCacheDir", "()Ljava/io/File;");
+    }
+
+    /// <summary>
+    /// 无 JNI 降级：从 /proc/self/cmdline 读进程名（普通 app 即包名，多进程形如 pkg:svc），
+    /// 推导 /data/data/{package}/cache。Activity 未附加 / JNI 不可用时使用。
+    /// </summary>
+    private static string? GetCacheDirNoJni()
+    {
+        try
+        {
+            // cmdline 以 \0 结尾，多进程进程名形如 "com.a.b:service"
+            var proc = File.ReadAllText("/proc/self/cmdline");
+            var pkg = proc.Split('\0')[0].Split(':')[0].Trim();
+            if (pkg.Length == 0 || pkg.Contains('/')) return null;
+
+            // /data/data 与 /data/user/0 在现代 Android 上互通
+            var dir = Path.Combine("/data/data", pkg, "cache");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+        catch (Exception ex)
+        {
+            Error("AndroidUtils", $"GetCacheDirNoJni: {ex.Message}");
+            return null;
+        }
+    }
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int chmod(string path, uint mode);
+
+    // 0o755: rwxr-xr-x
+    private const uint MODE_755 = 0x1ED;
+
+    /// <summary>
+    /// 加载 so 库的辅助方法：
+    /// 把 <paramref name="sourcePath"/> 处的库复制到 /data/data/{package}/cache，
+    /// 授予可执行权限（chmod 755）后 dlopen。
+    /// <para>适用场景：库文件位于不可执行位置（如外部存储 / 只读分区），
+    /// linker 拒绝直接 dlopen 时，经 app 私有 cache 目录中转加载。</para>
+    /// </summary>
+    /// <param name="sourcePath">源库文件绝对路径（如 .../manager/libcapstone.so）</param>
+    /// <param name="flags">dlopen 标志，默认 RTLD_NOW | RTLD_GLOBAL</param>
+    /// <returns>库句柄（dlopen）；已在进程中时返回其基址；失败返回 <see cref="IntPtr.Zero"/></returns>
+    public static IntPtr LoadLibrary(string sourcePath,
+        DL.RTLDFlags flags = DL.RTLDFlags.RTLD_NOW | DL.RTLDFlags.RTLD_GLOBAL)
+    {
+        var name = Path.GetFileName(sourcePath);
+        try
+        {
+            if (!File.Exists(sourcePath))
+            {
+                Error("AndroidUtils", $"LoadLibrary: source not found: {sourcePath}");
+                return IntPtr.Zero;
+            }
+
+            // 已加载 → 直接返回基址（也避免了覆写已 mmap 的 so 导致映射损坏）
+            var existing = DL.GetBaseAddress(name);
+            if (existing != IntPtr.Zero)
+            {
+                Info("AndroidUtils", $"LoadLibrary: already loaded: {name}");
+                return existing;
+            }
+
+            // Activity/JNI 可用走 getCacheDir()；否则从 /proc/self/cmdline 推导。
+            // CreateDirectory 幂等——目录可能被清理工具连目录本身删掉。
+            var cacheDir = GetCacheDir() ?? GetCacheDirNoJni();
+            if (string.IsNullOrEmpty(cacheDir))
+            {
+                Error("AndroidUtils", "LoadLibrary: cache dir unavailable (JNI and /proc fallback both failed)");
+                return IntPtr.Zero;
+            }
+            Directory.CreateDirectory(cacheDir);
+
+            var dest = Path.Combine(cacheDir, name);
+
+            // 目标缺失或长度不一致才复制（覆盖写只发生在未加载时，安全）
+            var needCopy = !File.Exists(dest) || new FileInfo(dest).Length != new FileInfo(sourcePath).Length;
+            if (needCopy)
+            {
+                File.Copy(sourcePath, dest, overwrite: true);
+                Info("AndroidUtils", $"LoadLibrary: copied {name} -> {dest}");
+            }
+
+            // 可执行权限（cache 下的新建文件默认没有 x 位）
+            chmod(dest, MODE_755);
+
+            var handle = DL.Open(dest, flags);
+            if (handle == IntPtr.Zero)
+                Error("AndroidUtils", $"LoadLibrary: dlopen failed: {Marshal.PtrToStringAnsi(DL.Error())}");
+            else
+                Info("AndroidUtils", $"LoadLibrary: loaded {name} @ 0x{handle:X}");
+
+            return handle;
+        }
+        catch (Exception ex)
+        {
+            Error("AndroidUtils", $"LoadLibrary({sourcePath}): {ex}");
+            return IntPtr.Zero;
+        }
     }
 
     private static string? GetDirFromContext(IntPtr context, string methodName, string sig, string? arg = null)

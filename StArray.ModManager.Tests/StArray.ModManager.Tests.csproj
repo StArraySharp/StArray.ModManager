@@ -29,16 +29,4 @@
                           ReferenceOutputAssembly="false" />
     </ItemGroup>
 
-    <!-- ─── GCC 编译 test_native.c → test_native.dll ─── -->
-    <Target Name="BuildNativeTestDll" BeforeTargets="BeforeBuild">
-        <PropertyGroup>
-            <NativeSource>$(MSBuildProjectDirectory)\native\test_native.c</NativeSource>
-            <NativeOutput>$(OutputPath)test_native.dll</NativeOutput>
-            <_Gcc>gcc</_Gcc>
-        </PropertyGroup>
-        <!-- <Exec Command="&quot;$(_Gcc)&quot; -shared -O2 -Wall -Werror -o &quot;$(NativeOutput)&quot; &quot;$(NativeSource)&quot;"
-              ConsoleToMSBuild="true" />
-        <Message Text="test_native.dll compiled" Importance="high" /> -->
-    </Target>
-
 </Project>

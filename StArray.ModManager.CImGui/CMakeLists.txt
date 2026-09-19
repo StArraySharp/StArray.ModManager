@@ -80,7 +80,13 @@ endif()
 
 target_include_directories(cimgui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(cimgui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/imgui)
-set_target_properties(cimgui PROPERTIES PREFIX "")
+
+# Windows 需要去掉前缀产出 cimgui.dll；Android/Linux 保持默认 lib 前缀
+# 产出 libcimgui.so（Android 动态链接器惯例，dlopen("cimgui") 也按此解析）。
+if (WIN32 OR MINGW OR MSYS)
+    set_target_properties(cimgui PROPERTIES PREFIX "")
+endif()
+
 target_link_libraries(cimgui ${IMGUI_LIBRARIES})
 
 #install

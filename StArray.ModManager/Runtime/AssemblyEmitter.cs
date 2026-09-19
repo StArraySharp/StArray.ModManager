@@ -1836,9 +1836,6 @@ public static unsafe class AssemblyEmitter
     private static List<(string name, object value)>? ReadEnumMembers(nint klassPtr, Type underlying)
         => Provider.ReadEnumMembers(klassPtr, underlying);
 
-    // ReadLiteralValue 已并入 MonoMetadataProvider.ReadEnumMembers（mono_field_get_data
-    // 原始字节路径）与 Il2CppMetadataProvider（装箱 unbox 路径）。
-
     /// <summary>Defines a real managed enum. Returns null when the metadata was not usable.</summary>
     private static TypeBuilder? TryDefineEnum(nint klassPtr, TypeBuilder? parentTb,
         string ns, string simpleName)

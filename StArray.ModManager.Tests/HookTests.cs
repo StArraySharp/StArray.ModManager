@@ -25,7 +25,7 @@ internal static class NativeResolver
 
     private static IntPtr Resolve(string name, Assembly asm, DllImportSearchPath? path)
     {
-        // test_native.dll 就在输出目录根下（由 BuildNativeTestDll MSBuild 目标产出）
+        // test_native.dll 需手动用 GCC 编译 native/test_native.c 放到输出目录
         if (name != "test_native") return IntPtr.Zero;
 
         var dllPath = Path.Combine(AppContext.BaseDirectory, "test_native.dll");

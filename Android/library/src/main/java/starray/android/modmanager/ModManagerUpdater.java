@@ -40,12 +40,14 @@ import java.util.zip.ZipInputStream;
 public class ModManagerUpdater {
 
     private static final String TAG = "ModManagerUpdater";
-    private static final String PROXY_URL = "https://gh-proxy.org/";
+    private static final String DEFAULT_PROXY_URL = "https://gh-proxy.org/";
 
     private final Activity activity;
     private String versionJsonUrl;
     private Path basePath;
     private boolean useProxy = true;
+    /** 自定义代理前缀；null 时用 {@link #DEFAULT_PROXY_URL}（仅在 useProxy 开启时生效） */
+    private String customProxyUrl;
 
     public static ModManagerUpdater create(Activity activity) {
         return new ModManagerUpdater(activity);
@@ -188,7 +190,7 @@ public class ModManagerUpdater {
                 Log.w(TAG, "Failed to delete local version.json: " + e.getMessage());
             }
         }
-        Log.i(TAG, "Starting download: url=" + remote.managerUrl + " target=" + mgr);
+        Log.i(TAG, "Starting download: url=" + remote.downloadUrl() + " target=" + mgr);
         var dialog = new AlertDialog.Builder(activity)
                 .setTitle(hasLocal ? "更新中" : "下载中")
                 .setMessage("正在下载...")
@@ -244,18 +246,19 @@ public class ModManagerUpdater {
             var zipFile = targetDir.getParent().resolve("manager-download.zip");
 
             updateDialog(dialog, "正在下载...", -1);
-            downloadFile(version.managerUrl, zipFile,
+            downloadFile(version.downloadUrl(), zipFile,
                     pct -> updateDialog(dialog, "正在下载 " + pct + "%", pct));
 
             long zipSize = Files.size(zipFile);
             Log.i(TAG, "Downloaded " + zipSize + " bytes");
 
-            if (version.sha256 != null && !version.sha256.isEmpty()) {
+            var expected = version.downloadSha256();
+            if (expected != null && !expected.isEmpty()) {
                 updateDialog(dialog, "校验中...", -1);
                 Log.i(TAG, "Verifying SHA-256...");
                 var actual = sha256(zipFile);
-                if (!actual.equalsIgnoreCase(version.sha256)) {
-                    Log.e(TAG, "SHA-256 mismatch! expected=" + version.sha256 + " actual=" + actual);
+                if (!actual.equalsIgnoreCase(expected)) {
+                    Log.e(TAG, "SHA-256 mismatch! expected=" + expected + " actual=" + actual);
                     Files.delete(zipFile);
                     throw new IOException("SHA-256 mismatch");
                 }
@@ -288,7 +291,7 @@ public class ModManagerUpdater {
                     Log.i(TAG, "Created mods directory: " + mods);
                 }
 
-                // 从 version.json 读取入口配置，不存在则用默认值
+                // 从 version.json 读取入口配置（platforms.android），无则用编译期默认值
                 var verFile = mgr.resolve("version.json");
                 String dll = "StArray.ModManager.dll";
                 String type = "StArray.ModManager.Managed";
@@ -297,17 +300,20 @@ public class ModManagerUpdater {
                     try {
                         var localVer = JSON.parseObject(
                                 new String(Files.readAllBytes(verFile)), VersionInfo.class);
-                        if (localVer.entryAssembly != null && !localVer.entryAssembly.isEmpty())
-                            dll = localVer.entryAssembly;
-                        if (localVer.entryMethod != null && !localVer.entryMethod.isEmpty()) {
-                            // 格式："TypeName::MethodName" → type, method
-                            var parts = localVer.entryMethod.split("::", 2);
-                            if (parts.length == 2) {
-                                type = parts[0].trim();
-                                method = parts[1].trim();
-                            } else {
-                                // 单值当作方法名，类型取默认
-                                method = localVer.entryMethod.trim();
+                        var android = localVer.android();
+                        if (android != null) {
+                            if (android.entryAssembly != null && !android.entryAssembly.isEmpty())
+                                dll = android.entryAssembly;
+                            if (android.entryMethod != null && !android.entryMethod.isEmpty()) {
+                                // 格式："TypeName::MethodName" → type, method
+                                var parts = android.entryMethod.split("::", 2);
+                                if (parts.length == 2) {
+                                    type = parts[0].trim();
+                                    method = parts[1].trim();
+                                } else {
+                                    // 单值当作方法名，类型取默认
+                                    method = android.entryMethod.trim();
+                                }
                             }
                         }
                         Log.i(TAG, "Entry from version.json: " + dll + " → " + type + "::" + method);
@@ -348,14 +354,41 @@ public class ModManagerUpdater {
         public String version;
         @JSONField(name = "versionCode")
         public int versionCode;
+        @JSONField(name = "platforms")
+        public PlatformInfo[] platforms;
+
+        /** android 平台配置（platforms[].name == "android"），无则 null。 */
+        public PlatformInfo android() {
+            if (platforms == null) return null;
+            for (var p : platforms) {
+                if ("android".equalsIgnoreCase(p.name)) return p;
+            }
+            return null;
+        }
+
+        /** 下载地址（android 平台的 manager 字段）。 */
+        public String downloadUrl() {
+            var p = android();
+            return p != null ? p.managerUrl : null;
+        }
+
+        /** SHA-256（android 平台）。 */
+        public String downloadSha256() {
+            var p = android();
+            return p != null ? p.sha256 : null;
+        }
+    }
+
+    /** platforms 数组元素（name/manager/sha256/entryAssembly/entryMethod）。 */
+    public static class PlatformInfo {
+        @JSONField(name = "name")
+        public String name;
         @JSONField(name = "manager")
         public String managerUrl;
         @JSONField(name = "sha256")
         public String sha256;
-        /** 入口程序集文件名（如 "StArray.ModManager.dll"） */
         @JSONField(name = "entryAssembly")
         public String entryAssembly;
-        /** 入口类型与方法（如 "StArray.ModManager.Managed::Entry"） */
         @JSONField(name = "entryMethod")
         public String entryMethod;
     }
@@ -363,7 +396,10 @@ public class ModManagerUpdater {
     // ──── HTTP ────
 
     private String proxyUrl(String url) {
-        return useProxy ? PROXY_URL + url : url;
+        if (!useProxy) return url;
+        var prefix = customProxyUrl != null && !customProxyUrl.isEmpty()
+                ? customProxyUrl : DEFAULT_PROXY_URL;
+        return prefix + url;
     }
 
     private String httpGetString(String urlStr) throws IOException {

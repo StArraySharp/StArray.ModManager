@@ -95,6 +95,26 @@ public static class Managed
         return 0;
     }
 
+    /// <summary>
+    /// 软禁用（宿主 UMM 禁用 Mod 时经 coreclr_create_delegate 调用）：
+    /// 卸载渲染/输入 hook，SMM 停止一切活动。CoreCLR 无法在同进程内 shutdown 后重启，
+    /// 因此运行时保持驻留（空闲），由 <see cref="Resume"/> 恢复。
+    /// </summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl), typeof(CallConvStdcall)])]
+    public static int Shutdown()
+    {
+        Logger.Info(nameof(Managed), "Suspend: disabling hooks");
+        return NativeApi.DisableHooks();
+    }
+
+    /// <summary>软禁用后恢复（宿主再次启用 Mod 时调用）。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl), typeof(CallConvStdcall)])]
+    public static int Resume()
+    {
+        Logger.Info(nameof(Managed), "Resume: enabling hooks");
+        return NativeApi.EnableHooks();
+    }
+
     static void Write(string s)
     {
         lock (_writeLock)

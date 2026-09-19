@@ -17,37 +17,30 @@ extern HWND g_GameWindow;
 extern WNDPROC g_OriginalWndProc;
 
 namespace DX9Hook {
-    //vars
-
-    //hook funcs
     bool InstallHook();
     HRESULT HookPresent(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags);
     LRESULT APIENTRY HookWndProc(HWND h, UINT m, WPARAM w, LPARAM l);
 }
 
 namespace DX11Hook {
-    //vars
     extern IDXGISwapChain* SwapChain;
     extern ID3D11DeviceContext* DeviceContext;
-    //more
 
-    //hook funcs
     bool InstallHook();
     HRESULT HookPresent(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags);
     LRESULT APIENTRY HookWndProc(HWND h, UINT m, WPARAM w, LPARAM l);
+
+    // wndproc subclass control (soft disable/enable)
+    void InstallWndProc();
+    void UninstallWndProc();
 }
 
 namespace DX12Hook {
-    //vars
     extern IDXGISwapChain* SwapChain;
     extern ID3D12Device* Device;
     extern ID3D12CommandQueue* CommandQueue;
-    //more
 
-    //hook funcs
     bool InstallHook();
     HRESULT HookPresent(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags);
     LRESULT APIENTRY HookWndProc(HWND h, UINT m, WPARAM w, LPARAM l);
-    //more
-
 }

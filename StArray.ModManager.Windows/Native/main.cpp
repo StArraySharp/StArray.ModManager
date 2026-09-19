@@ -29,24 +29,24 @@ extern "C" __declspec(dllexport) int __cdecl Init(
     return 0;
 }
 
+// Soft disable/enable: unhook Present + WndProc without tearing down MinHook/ImGui,
+// so the manager can be re-enabled later in the same session.
+extern "C" __declspec(dllexport) int __cdecl DisableHooks() {
+    DX11Hook::UninstallWndProc();
+    return MH_DisableHook(MH_ALL_HOOKS);
+}
+
+extern "C" __declspec(dllexport) int __cdecl EnableHooks() {
+    int r = MH_EnableHook(MH_ALL_HOOKS);
+    DX11Hook::InstallWndProc();
+    return r;
+}
+
 
 // ---- DLL Entry Point ----
 BOOL APIENTRY DllMain(HMODULE h, DWORD r, LPVOID) {
     if (r == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(h);
-        /*SetBackend(1);
-        Init([] {
-            igCreateContext(NULL);
-            return (void*)nullptr;
-        }, []{ igDestroyContext(igGetCurrentContext());},
-        [] {
-            igNewFrame();
-            igBegin("Dear ImGui", NULL, 0);
-            igText("text");
-            igEnd();
-            igEndFrame();
-            igRender();
-        });*/
     } else if (r == DLL_PROCESS_DETACH) {
         if (imgui_callbacks.shutdown_callback) imgui_callbacks.shutdown_callback();
         DisableAll();
@@ -54,4 +54,3 @@ BOOL APIENTRY DllMain(HMODULE h, DWORD r, LPVOID) {
     return TRUE;
 }
 
-// ---- P/Invoke Exports ----

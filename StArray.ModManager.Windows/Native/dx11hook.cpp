@@ -69,10 +69,9 @@ namespace DX11Hook
 
             if (ImGui_ImplWin32_Init(g_GameWindow) && ImGui_ImplDX11_Init(device, DeviceContext))
             {
-                SwapChain = swapChain;
-                g_OriginalWndProc = (WNDPROC)SetWindowLongPtrW(g_GameWindow,
-                                                               GWLP_WNDPROC, (LONG_PTR)HookWndProc);
-                isIl2Cpp = IsIl2Cpp();
+            SwapChain = swapChain;
+            InstallWndProc();
+            isIl2Cpp = IsIl2Cpp();
                 Initialised = true;
                 ImGui_Initialised = true;
                 DEBUG_LOG("DX11Hook: ImGui initialised, hwnd=%p", g_GameWindow);
@@ -108,6 +107,22 @@ namespace DX11Hook
         }
 
         return OriginalPresent(swapChain, syncInterval, flags);
+    }
+
+    void InstallWndProc()
+    {
+        if (g_GameWindow && !g_OriginalWndProc)
+            g_OriginalWndProc = (WNDPROC)SetWindowLongPtrW(g_GameWindow,
+                                                           GWLP_WNDPROC, (LONG_PTR)HookWndProc);
+    }
+
+    void UninstallWndProc()
+    {
+        if (g_GameWindow && g_OriginalWndProc)
+        {
+            SetWindowLongPtrW(g_GameWindow, GWLP_WNDPROC, (LONG_PTR)g_OriginalWndProc);
+            g_OriginalWndProc = nullptr;
+        }
     }
 
     bool InstallHook()

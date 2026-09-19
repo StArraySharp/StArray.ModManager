@@ -15,6 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Gee.External.Capstone" Version="2.3.0" />
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
   </ItemGroup>
 

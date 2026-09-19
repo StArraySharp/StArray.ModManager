@@ -25,4 +25,12 @@ public static class NativeApi
     /// <summary>Select which backend to hook. 0=D3D12, 1=D3D11, 2=D3D9, 3=GL, 4=VK. Call before Init().</summary>
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SetBackend")]
     public static extern int SetBackend(int backend);
+
+    /// <summary>软禁用：卸载 Present/WndProc hook（保留 MinHook 与 ImGui 状态，可再次启用）。</summary>
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "DisableHooks")]
+    public static extern int DisableHooks();
+
+    /// <summary>重新启用 <see cref="DisableHooks"/> 卸载的 hook。</summary>
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "EnableHooks")]
+    public static extern int EnableHooks();
 }

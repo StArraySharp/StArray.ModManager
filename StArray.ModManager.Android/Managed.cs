@@ -12,7 +12,6 @@ using StArray.ModManager.RuntimeAbstractions;
 
 namespace StArray.ModManager.Android;
 
-/// <summary>CoreCLR entry / 加载器入口 — called by native delegate</summary>
 /// <summary>CoreCLR 入口 / 加载器入口 — called by native delegate</summary>
 public static class Managed
 {
@@ -57,10 +56,14 @@ public static class Managed
         NativeLibraryResolver.ResolveRequested += (libraryName, assembly) =>
             libraryName.Contains("IL2CPP_LIBRARY_NAME") ? Il2CppInit() : IntPtr.Zero;
 
+        // Capstone：DllImport("capstone") 在 Gee.External.Capstone 程序集内，
+        // resolver 必须装到该程序集上才生效；触发时从内嵌资源解压并经 cache 加载
+        NativeLibraryResolver.Install(typeof(Gee.External.Capstone.CapstoneDisassembler).Assembly);
+        NativeLibraryResolver.ResolveRequested += CapstoneLibrary.Resolve;
+
         // 文件日志 → manager 根目录（与 mods/、runtime/ 同级）
         var rootDir = Path.GetDirectoryName(modsPath)!;
         _logWriter = new StreamWriter(Path.Combine(rootDir, "manager.log"), append: true) { AutoFlush = true };
-        _logWriter.AutoFlush = true;
         Logger.OnLog += (level, tag, msg) =>
         {
             lock (_logLock)
