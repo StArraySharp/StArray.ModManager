@@ -132,8 +132,7 @@ public sealed unsafe class D3D11Renderer : IImGuiRenderer
         _origWnd = Win32Native.SetWindowLongPtrW(_hwnd, -4, Marshal.GetFunctionPointerForDelegate(_wndDel));
 
         // ImGui
-        ImGui.CreateContext();
-        ImGui.GetIO().ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard | ImGuiConfigFlags.DockingEnable;
+        ((IImGuiRenderer)this).InitImGui();
         ImGui_ImplWin32_Init(_hwnd);
         ImGui_ImplDX11_Init(_dev, _ctx);
         _inited = true; Logger.Info(nameof(D3D11Renderer), "ImGui ready");
