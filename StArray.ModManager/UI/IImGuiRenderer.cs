@@ -27,72 +27,162 @@ public interface IImGuiRenderer
         ImGui.SetCurrentContext(ImGui.CreateContext());
         var io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard | ImGuiConfigFlags.DockingEnable;
-        LoadIconFont(io);
-        LoadEmbeddedFont(io);
-        // 注意：AddFontFromMemoryTTF 只存指针，Build() 时才真正读取数据
-        io.Fonts.Build();
-        // Build() 之后才能安全释放字体内存
-        FreeFontMemory();
+
+        try
+        {
+            var hasBaseFont = LoadEmbeddedFont(
+                io,
+                "StArray.ModManager.Resources.NotoSansCJK-Regular.otf",
+                ref _cjkFontPtr,
+                merge: false,
+                GetAllUnicodeRanges());
+
+            var latinFontIsBase = false;
+            if (!hasBaseFont)
+            {
+                latinFontIsBase = LoadEmbeddedFont(
+                    io,
+                    "StArray.ModManager.Resources.NotoSans-Regular.ttf",
+                    ref _latinFontPtr,
+                    merge: false,
+                    GetAllUnicodeRanges());
+                hasBaseFont = latinFontIsBase;
+            }
+
+            if (!hasBaseFont)
+            {
+                io.Fonts.AddFontDefault();
+                hasBaseFont = true;
+            }
+
+            if (!latinFontIsBase)
+            {
+                LoadEmbeddedFont(
+                    io,
+                    "StArray.ModManager.Resources.NotoSans-Regular.ttf",
+                    ref _latinFontPtr,
+                    merge: true,
+                    GetAllUnicodeRanges());
+            }
+            LoadEmbeddedFont(
+                io,
+                "StArray.ModManager.Resources.NotoSansSymbols2-Regular.ttf",
+                ref _symbolsFontPtr,
+                merge: true,
+                GetAllUnicodeRanges());
+            LoadEmbeddedFont(
+                io,
+                "StArray.ModManager.Resources.OpenMoji-black-glyf.ttf",
+                ref _emojiFontPtr,
+                merge: true,
+                GetAllUnicodeRanges());
+            LoadEmbeddedFont(
+                io,
+                "StArray.ModManager.Resources.fa-solid-900.ttf",
+                ref _iconFontPtr,
+                merge: true,
+                GetIconRanges());
+
+            // AddFontFromMemoryTTF 只保存指针，Build() 时才真正读取数据。
+            io.Fonts.Build();
+        }
+        finally
+        {
+            FreeFontMemory();
+        }
     }
 
-    private static nint _fontPtr1, _fontPtr2;
+    private static nint _cjkFontPtr;
+    private static nint _latinFontPtr;
+    private static nint _symbolsFontPtr;
+    private static nint _emojiFontPtr;
+    private static nint _iconFontPtr;
+    private static nint _allUnicodeRangesPtr;
+    private static nint _iconRangesPtr;
 
     private static void FreeFontMemory()
     {
-        if (_fontPtr1 != 0) { Marshal.FreeHGlobal(_fontPtr1); _fontPtr1 = 0; }
-        if (_fontPtr2 != 0) { Marshal.FreeHGlobal(_fontPtr2); _fontPtr2 = 0; }
+        Free(ref _cjkFontPtr);
+        Free(ref _latinFontPtr);
+        Free(ref _symbolsFontPtr);
+        Free(ref _emojiFontPtr);
+        Free(ref _iconFontPtr);
+        Free(ref _allUnicodeRangesPtr);
+        Free(ref _iconRangesPtr);
     }
 
-    private static unsafe void LoadEmbeddedFont(ImGuiIOPtr io)
+    private static void Free(ref nint ptr)
+    {
+        if (ptr == 0) return;
+        Marshal.FreeHGlobal(ptr);
+        ptr = 0;
+    }
+
+    private static nint GetAllUnicodeRanges()
+    {
+        if (_allUnicodeRangesPtr != 0) return _allUnicodeRangesPtr;
+        _allUnicodeRangesPtr = AllocateRanges(0x0001, 0xFFFF);
+        return _allUnicodeRangesPtr;
+    }
+
+    private static nint GetIconRanges()
+    {
+        if (_iconRangesPtr != 0) return _iconRangesPtr;
+        _iconRangesPtr = AllocateRanges(0xE000, 0xF8FF);
+        return _iconRangesPtr;
+    }
+
+    private static nint AllocateRanges(ushort first, ushort last)
+    {
+        var ptr = Marshal.AllocHGlobal(sizeof(ushort) * 3);
+        Marshal.WriteInt16(ptr, 0, (short)first);
+        Marshal.WriteInt16(ptr, sizeof(ushort), (short)last);
+        Marshal.WriteInt16(ptr, sizeof(ushort) * 2, 0);
+        return ptr;
+    }
+
+    private static unsafe bool LoadEmbeddedFont(
+        ImGuiIOPtr io,
+        string resourceName,
+        ref nint fontPtr,
+        bool merge,
+        nint glyphRanges)
     {
         try
         {
             var asm = typeof(IImGuiRenderer).Assembly;
-            using var stream = asm.GetManifestResourceStream(
-                "StArray.ModManager.Resources.NotoSansCJK-Regular.otf");
-            if (stream == null) return;
+            using var stream = asm.GetManifestResourceStream(resourceName);
+            if (stream == null) return false;
 
-            var ttf = new byte[stream.Length];
-            stream.ReadExactly(ttf);
-            _fontPtr1 = Marshal.AllocHGlobal(ttf.Length);
-            Marshal.Copy(ttf, 0, _fontPtr1, ttf.Length);
+            var fontData = new byte[checked((int)stream.Length)];
+            stream.ReadExactly(fontData);
+            fontPtr = Marshal.AllocHGlobal(fontData.Length);
+            Marshal.Copy(fontData, 0, fontPtr, fontData.Length);
 
-            // MergeMode: 中文字形合并到图标基础字体
             var cfg = ImGuiNative.ImFontConfig_ImFontConfig();
-            cfg->MergeMode = 1;
-            cfg->FontDataOwnedByAtlas = 0; // 自己管理内存，Build() 后释放
+            try
+            {
+                cfg->MergeMode = merge ? (byte)1 : (byte)0;
+                cfg->FontDataOwnedByAtlas = 0;
+                io.Fonts.AddFontFromMemoryTTF(
+                    fontPtr,
+                    fontData.Length,
+                    16f,
+                    cfg,
+                    glyphRanges);
+            }
+            finally
+            {
+                ImGuiNative.ImFontConfig_destroy(cfg);
+            }
 
-            var glyphRanges = io.Fonts.GetGlyphRangesChineseSimplifiedCommon();
-            io.Fonts.AddFontFromMemoryTTF(_fontPtr1, ttf.Length, 16f, cfg, glyphRanges);
-            ImGuiNative.ImFontConfig_destroy(cfg);
+            return true;
         }
-        catch { /* 静默跳过 */ }
-    }
-
-    private static unsafe void LoadIconFont(ImGuiIOPtr io)
-    {
-        try
+        catch
         {
-            var asm = typeof(IImGuiRenderer).Assembly;
-            using var stream = asm.GetManifestResourceStream(
-                "StArray.ModManager.Resources.fa-solid-900.ttf");
-            if (stream == null) return;
-
-            var ttf = new byte[stream.Length];
-            stream.ReadExactly(ttf);
-            _fontPtr2 = Marshal.AllocHGlobal(ttf.Length);
-            Marshal.Copy(ttf, 0, _fontPtr2, ttf.Length);
-
-            // 基础字体：FontAwesome 7 图标
-            var cfg = ImGuiNative.ImFontConfig_ImFontConfig();
-            cfg->FontDataOwnedByAtlas = 0; // 自己管理内存
-
-            ushort[] iconRange = [0xe005, 0xf8ff, 0];
-            fixed (ushort* r = iconRange)
-                io.Fonts.AddFontFromMemoryTTF(_fontPtr2, ttf.Length, 16f, cfg, (IntPtr)r);
-            ImGuiNative.ImFontConfig_destroy(cfg);
+            Free(ref fontPtr);
+            return false;
         }
-        catch { /* 静默跳过 */ }
     }
 
     /// <summary>
