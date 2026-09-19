@@ -6,6 +6,22 @@
 
 ### 构建
 
+前置条件：
+
+- .NET 10 SDK
+- Visual Studio：**使用 C++ 的桌面开发** 工作负载（MSVC + Windows SDK）
+- **适用于 Windows 的 C++ CMake 工具**（CMake + Ninja，需在 PATH）
+- 开启 Windows **开发者模式**，克隆后还原 cimgui 符号链接（详见
+  [README · Build](README.md#build)），否则 CMake 找不到 cimgui 源码：
+
+```bash
+git config core.symlinks true
+rm StArray.ModManager.Windows/Native/cimgui Android/library/src/main/cpp/libs/cimgui
+git checkout -- StArray.ModManager.Windows/Native/cimgui Android/library/src/main/cpp/libs/cimgui
+```
+
+然后：
+
 ```bash
 git clone --recurse-submodules https://github.com/StArraySharp/StArray.ModManager.git
 dotnet build StArray.ModManager.Windows -c Release

@@ -25,7 +25,10 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\fa-solid-900.ttf" />
+    <EmbeddedResource Include="Resources\NotoSans-Regular.ttf" />
     <EmbeddedResource Include="Resources\NotoSansCJK-Regular.otf" />
+    <EmbeddedResource Include="Resources\NotoSansSymbols2-Regular.ttf" />
+    <EmbeddedResource Include="Resources\OpenMoji-black-glyf.ttf" />
   </ItemGroup>
 
   <ItemGroup>
