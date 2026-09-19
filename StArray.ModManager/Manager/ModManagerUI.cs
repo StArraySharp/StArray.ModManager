@@ -54,6 +54,16 @@ public partial class ModManagerUI
     {
         try
         {
+            // 生成前先卸载已加载的旧 stub：mod 走 ALC 路径加载后 DLL 被内存映射锁定，
+            // 不卸载的话 assembly.Save 会 IOException。
+            var loaded = _modManager.Mods.FirstOrDefault(m =>
+                m.Id == AssemblyEmitter.OutputName && m.LoadState == ModLoadState.Loaded);
+            if (loaded != null)
+            {
+                Logger.Info(nameof(ModManagerUI), "Unloading stale UnmanagedTypeAssembly before regenerate");
+                _modManager.UnloadMod(loaded);
+            }
+
             var modDir = AssemblyEmitter.GenerateToMods(_config.ModsDirectory);
             if (modDir == null)
             {

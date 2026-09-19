@@ -84,7 +84,7 @@ public static class Managed
             Il2CppFunctions.SetIl2CppLibraryPath(Path.Combine(DllParentPath, "..", "..", "GameAssembly.dll"));
         }
         HookHelper.Instance = new MinHook();
-        ModManagerUI modManagerUI = new(new ModLoader(modsPath), DllParentPath);
+        ModManagerUI modManagerUI = new(new ModLoader(modsPath, DllParentPath), DllParentPath);
 
         NativeApi.SetBackend(1); // D3D11
         ImGuiDXRenderer.OnRender += modManagerUI.Render;

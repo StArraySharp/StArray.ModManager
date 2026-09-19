@@ -36,7 +36,7 @@ public class ModLoader
         // 保存当前已加载 Mod 的状态（扫描后恢复）
         var loadedStates = _mods
             .Where(m => m.LoadState == ModLoadState.Loaded)
-            .ToDictionary(m => m.Id, m => (m.PluginInstance, m.IsEnabled));
+            .ToDictionary(m => m.Id, m => (m.PluginInstance, m.IsEnabled, m.LoadContext));
 
         _mods.Clear();
 
@@ -57,6 +57,7 @@ public class ModLoader
                 {
                     mod.PluginInstance = state.PluginInstance;
                     mod.IsEnabled = state.IsEnabled;
+                    mod.LoadContext = state.LoadContext;
                     mod.LoadState = ModLoadState.Loaded;
                 }
                 _mods.Add(mod);
@@ -119,27 +120,36 @@ public class ModLoader
 
         try
         {
-            // 字节加载：Assembly.LoadFrom(path) 会映射并锁定文件，导致后续重新生成
-            // mod DLL 时 IOException（旧实例还占着句柄）。从内存加载则不锁文件。
-            var assembly = Assembly.Load(File.ReadAllBytes(entryDll));
-
-            var pluginType = ResolvePluginType(assembly);
-            if (pluginType == null) return null;
-
-            // 实例化以读取元数据
-            var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;
-
-            return new ModEntry
+            // 探测性元数据读取走临时 ALC，读完即弃：既不锁文件，也不把类型
+            // 留在默认上下文（否则后续正式加载会出现重复类型/版本冲突）。
+            var probe = new ModLoadContext($"Probe:{dirName}", folderPath, _managerDir);
+            try
             {
-                Id = plugin.Id,
-                Name = plugin.Name,
-                Version = plugin.Version,
-                Author = plugin.Author,
-                Description = plugin.Description,
-                Dependencies = plugin.Dependencies.ToList(),
-                FolderPath = folderPath,
-                EntryPoint = entryDll,
-            };
+                // 探测只读元数据：流式加载即可（不锁文件；Location 无人消费）
+                var assembly = probe.LoadMetadataFromPath(entryDll);
+
+                var pluginType = ResolvePluginType(assembly);
+                if (pluginType == null) return null;
+
+                // 实例化以读取元数据（Dependencies 允许实现返回 null —— 接口不变，这里宽容处理）
+                var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;
+
+                return new ModEntry
+                {
+                    Id = plugin.Id,
+                    Name = plugin.Name,
+                    Version = plugin.Version,
+                    Author = plugin.Author,
+                    Description = plugin.Description,
+                    Dependencies = plugin.Dependencies?.ToList() ?? new List<string>(),
+                    FolderPath = folderPath,
+                    EntryPoint = entryDll,
+                };
+            }
+            finally
+            {
+                probe.Unload();
+            }
         }
         catch (Exception ex)
         {
@@ -149,7 +159,8 @@ public class ModLoader
     }
 
     /// <summary>
-    /// 加载指定的 Mod
+    /// 加载指定的 Mod：从磁盘字节读入独立 ALC（不锁文件、可卸载）。
+    /// 依赖的 mod 由各自 ALC 承载，卸载时按反向依赖级联。
     /// </summary>
     public bool LoadMod(ModEntry mod)
     {
@@ -165,7 +176,7 @@ public class ModLoader
 
         try
         {
-            // 依赖检查
+            // 依赖检查：依赖缺失报错；未加载则先递归加载（各自的 ALC）
             foreach (var depId in mod.Dependencies)
             {
                 var dep = _mods.FirstOrDefault(m => m.Id == depId);
@@ -176,25 +187,35 @@ public class ModLoader
                 if (dep.LoadState != ModLoadState.Loaded)
                 {
                     Logger.Info(nameof(ModLoader), $"  load dep: {dep.Name}");
-                    LoadMod(dep);
+                    if (!LoadMod(dep))
+                        throw new Exception($"dependency failed to load: {dep.Name}");
                 }
             }
 
-            // 加载入口程序集
+            // 加载入口程序集到本 mod 的可卸载 ALC
             if (!string.IsNullOrEmpty(mod.EntryPoint) && File.Exists(mod.EntryPoint))
             {
-                // 字节加载，避免锁定 DLL 文件（同 DiscoverMod 处的说明）
-                var assembly = Assembly.Load(File.ReadAllBytes(mod.EntryPoint));
+                var alc = new ModLoadContext(
+                    $"Mod:{mod.Id}",
+                    Path.GetDirectoryName(mod.EntryPoint)!,
+                    _managerDir);
 
+                var assembly = alc.LoadFromFilePath(mod.EntryPoint);
                 var pluginType = ResolvePluginType(assembly);
                 if (pluginType != null)
                 {
                     var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;
                     mod.PluginInstance = plugin;
+                    mod.LoadContext = alc;
                     plugin.OnLoad();
 
                     if (plugin is IModSettings s)
                         ModManagerUI.LoadSettings(mod, s);
+                }
+                else
+                {
+                    // 无插件类型的程序集不保留 ALC
+                    alc.Unload();
                 }
             }
 
@@ -214,18 +235,50 @@ public class ModLoader
     }
 
     /// <summary>
-    /// 卸载指定的 Mod
+    /// 卸载指定的 Mod，并级联卸载所有（直接/间接）依赖它的 mod。
     /// </summary>
     public void UnloadMod(ModEntry mod)
     {
         if (mod.LoadState != ModLoadState.Loaded) return;
 
+        // 反向依赖闭包：a 依赖 b 时，卸 b 必须先卸 a。
+        var dependents = _mods
+            .Where(m => m.LoadState == ModLoadState.Loaded && DependsOn(m, mod.Id))
+            .ToList();
+        foreach (var dependent in dependents)
+        {
+            Logger.Info(nameof(ModLoader), $"  cascade unload: {dependent.Name} (depends on {mod.Name})");
+            UnloadMod(dependent);
+        }
+
         mod.PluginInstance?.OnUnload();
         mod.PluginInstance = null;
+        mod.LoadContext?.UnloadAndTrack(); // ALC 异步回收；调用方已无强引用即可
+        mod.LoadContext = null;
         mod.IsEnabled = false;
         mod.LoadState = ModLoadState.NotLoaded;
         Logger.Info(nameof(ModLoader), $"{mod.Name} 已卸载");
         OnModStateChanged?.Invoke(mod);
+    }
+
+    /// <summary>m 的依赖闭包（直接+间接）里是否含 targetId。</summary>
+    private bool DependsOn(ModEntry m, string targetId)
+    {
+        if (m.Dependencies.Contains(targetId)) return true;
+        return m.Dependencies
+            .Select(id => _mods.FirstOrDefault(x => x.Id == id))
+            .Where(d => d != null)
+            .Any(d => DependsOn(d!, targetId));
+    }
+
+    /// <summary>管理器目录（SMM 依赖兜底解析），由构造传入。</summary>
+    private readonly string? _managerDir;
+
+    /// <summary>创建 ModLoader 并指定 Mods 目录</summary>
+    public ModLoader(string modsDirectory, string? managerDir = null)
+    {
+        _modsDirectory = modsDirectory;
+        _managerDir = managerDir;
     }
 
     /// <summary>

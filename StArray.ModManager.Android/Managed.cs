@@ -71,7 +71,7 @@ public static class Managed
         };
         
         _ = RuntimeManager.Detect();
-        var loader = new ModLoader(modsPath);
+        var loader = new ModLoader(modsPath, AssemblyPath is { } ap ? Path.GetDirectoryName(ap) : null);
         var ui = new ModManagerUI(loader, Path.GetDirectoryName(AssemblyPath)!);
         HookHelper.Instance = new DobbyHook();
         ImGuiEGLRender.OnRender += ui.Render;

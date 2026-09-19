@@ -43,6 +43,12 @@ public class ModEntry
     /// <summary>已加载的插件实例（供 UI 调用 OnGui）</summary>
     public IModPlugin? PluginInstance { get; set; }
 
+    /// <summary>
+    /// 本 mod 的可卸载加载上下文；null = 未加载。
+    /// 卸载时置 null 并 <see cref="ModLoadContext.Unload"/>。
+    /// </summary>
+    public ModLoadContext? LoadContext { get; set; }
+
     /// <summary>格式化显示：Name vVersion</summary>
     public override string ToString() => $"{Name} v{Version}";
 }
