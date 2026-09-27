@@ -3,6 +3,7 @@
 
 package net.dot;
 
+import starray.android.modmanager.ModManagerUtils;
 import android.util.Log;
 import java.util.ArrayList;
 
@@ -26,6 +27,7 @@ public final class MonoRunner {
         System.loadLibrary("System.Security.Cryptography.Native.Android");
         System.loadLibrary("monodroid");
         System.loadLibrary("modmanager");
+        ModManagerUtils.registerHostInputBridge();
     }
 
     // ========================================================================

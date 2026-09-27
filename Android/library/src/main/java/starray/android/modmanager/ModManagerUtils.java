@@ -38,6 +38,25 @@ public class ModManagerUtils {
         return null;
     }
 
+    /**
+     * Activate the Java input bridge exposed by patched host Activities.
+     * Reflection avoids a hard class/method dependency; unpatched hosts can load the AAR,
+     * but they do not provide input events on the bridge-only input path.
+     */
+    public static boolean registerHostInputBridge() {
+        Activity activity = getUnityActivity();
+        if (activity == null) return false;
+
+        try {
+            java.lang.reflect.Method method = activity.getClass()
+                .getMethod("registerJavaInputBridge");
+            Object result = method.invoke(activity);
+            return result instanceof Boolean && (Boolean) result;
+        } catch (Exception | LinkageError ignored) {
+            return false;
+        }
+    }
+
     /** showSoftInput 前调用，把 ImGui 已有文本同步到 EditText */
     public static void setInputText(String text) {
         if (unityActivity == null) return;

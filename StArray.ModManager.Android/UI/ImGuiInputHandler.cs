@@ -1,14 +1,11 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using ImGuiNET;
 using StArray.ModManager.Android.Native;
-using StArray.ModManager.Hooks;
 using StArray.ModManager.Manager;
-using StArray.ModManager.Runtime;
+using StArray.ModManager.Native;
 
 namespace StArray.ModManager.Android.UI;
 
-/// <summary>ImGui input handler / 输入处理器 — touch/key hooks + IME control</summary>
+/// <summary>ImGui input handler / 输入处理器 — Java bridge input + IME control</summary>
 public static partial class ImGuiInputHandler
 {
     /// <summary>ImGui 上下文就绪后由渲染器设置</summary>
@@ -16,16 +13,20 @@ public static partial class ImGuiInputHandler
     
 
     private static bool s_wantTextInputLast;
+    private static int s_javaPrimaryPointerId = -1;
 
     /// <summary>
-    /// 安装触摸事件和按键事件 Hook
+    /// 注册 Java Activity 输入桥接回调。宿主 APK 必须包含 Activity 转发补丁。
     /// </summary>
     public static void InstallInputHooks()
     {
         if (!IsInitialized) return;
         try
         {
-            InstallHooks();
+            if (!AndroidJavaInputBridge.RegisterCallback())
+                Logger.Error(nameof(ImGuiInputHandler),
+                    "Could not register the Java Activity input bridge callback.");
+
             // IME 字符回调：Java nativeSendChar → C → 此回调 → ImGui
             NativeFunctions.SetOnAcceptCharCallback(codepoint =>
             {
@@ -68,88 +69,218 @@ public static partial class ImGuiInputHandler
         IsInitialized = true;
     }
 
-    /*
-    /// <summary>触摸事件 Hook 回调</summary>
-    [NativeHook("libinput.so","_ZN7android13InputConsumer14consumeSamplesEPNS_26InputEventFactoryInterfaceERNS0_5BatchEmPjPPNS_10InputEventE")]
-    public unsafe static long OnConsumeSamples(void* thiz,void* factory, IntPtr batch,
-        ulong count, uint* outSeq, void** outEvent)
+    internal static void DispatchJavaInput(AndroidInputEventInfo input)
     {
-        var result = OnConsumeSamplesOriginal(thiz,factory, batch, count, outSeq, outEvent);
-        if (IsInitialized && *outEvent != null) ImGuiImplAndroid.HandleInputEvent(new IntPtr(*outEvent));
-        return result;
-    }
-    
-    [NativeHook("libinput.so","_ZN7android13InputConsumer7consumeEPNS_26InputEventFactoryInterfaceEblPjPPNS_10InputEventE")]
-    public unsafe static long OnConsume(void* thiz, void* factory, bool consumeBatches, ulong frameTime, uint* outSeq, void** outEvent)
-    {
-        var result = OnConsumeOriginal(thiz, factory, consumeBatches, frameTime, outSeq, outEvent);
-        if (IsInitialized && *outEvent != null) ImGuiImplAndroid.HandleInputEvent(new IntPtr(*outEvent));
-        return result;
-    }*/
-    
-    [NativeHook("GetInitializeMotionEventAddress")]
-    public unsafe static bool OnInitializeMotionEvent(void* @event, void* message)
-    {
-        var result = OnInitializeMotionEventOriginal(@event, message);
-        var x = AndroidInput.AMotionEvent_getX(new(@event), 0);
-        var y = AndroidInput.AMotionEvent_getY(new(@event), 0);
-        if (InputEvents.HasSubscribers)
-            InputEvents.RaiseFrom(new IntPtr(@event));
-        ImGuiImplAndroid.HandleInputEvent(new IntPtr(@event));
-        return result;
-    }
+        if (!IsInitialized)
+            return;
 
-    private static nint GetInitializeMotionEventAddress()
-    {
-        byte?[] sig = NativeFuncResolver.ParseHexPattern(
-            "e8 0f 19 fc fd 7b 01 a9 fc 6f 02 a9 fa 67 03 a9 " +
-            "f8 5f 04 a9 f6 57 05 a9 f4 4f 06 a9 fd 43 00 91");
-        var r = new NativeFuncResolver("/system/lib64/libinput.so");
-        long rva = r.FindSymbolRva("_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
-        try
+        var io = ImGui.GetIO();
+        if (input.Kind == AndroidInputEventKind.Key)
         {
-            if (rva < 0)
+            DispatchJavaKeyEvent(io, input);
+            return;
+        }
+
+        ReadOnlySpan<AndroidInputPointerInfo> pointers = input.Pointers.Span;
+        if (input.Kind != AndroidInputEventKind.Motion || pointers.Length == 0)
+            return;
+
+        int pointerCount = pointers.Length;
+        int actionIndex = Math.Clamp(input.ActionIndex, 0, pointerCount - 1);
+        int selectedIndex = actionIndex;
+        if (s_javaPrimaryPointerId >= 0)
+        {
+            for (int index = 0; index < pointerCount; index++)
             {
-                var text = r.TextBytes;
-                long textAddr = r.TextBaseAddress;
-                int pos = 0;
-                while ((pos = NativeFuncResolver.Search(text, sig, pos)) >= 0)
+                if (pointers[index].Id == s_javaPrimaryPointerId)
                 {
-                    int ctxEnd = Math.Min(pos + 60, text.Length);
-                    bool hasMrs = false, hasLdr = false;
-                    for (int j = pos + 32; j <= ctxEnd - 4; j += 4)
-                    {
-                        int inst = BitConverter.ToInt32(text.AsSpan(j));
-                        if (!hasMrs && (inst & 0xffffffe0) == 0xd53bd040)
-                            hasMrs = true;
-                        if (!hasLdr && (inst & 0xffe003e0) == 0xb9400020)
-                        {
-                            int imm12 = (inst >> 10) & 0xfff;
-                            if (imm12 * 4 == 0xc) hasLdr = true;
-                        }
-                        if (hasMrs && hasLdr) break;
-                    }
-                    if (hasMrs && hasLdr)
-                    {
-                        rva = textAddr + pos;
-                        if (pos >= 4)
-                        {
-                            int prev = BitConverter.ToInt32(text.AsSpan(pos - 4));
-                            if (prev == unchecked((int)0xd503233f)) rva -= 4;
-                        }
-                        break;
-                    }
-                    pos++;
+                    selectedIndex = index;
+                    break;
                 }
-                if (rva < 0) throw new KeyNotFoundException("initializeMotionEvent not found by signature.");
             }
         }
-        catch (Exception ex)
+
+        AndroidInputPointerInfo pointer = pointers[selectedIndex];
+        float scaleX = input.ViewportWidth > 0
+            ? io.DisplaySize.X / input.ViewportWidth
+            : 1.0f;
+        float scaleY = input.ViewportHeight > 0
+            ? io.DisplaySize.Y / input.ViewportHeight
+            : 1.0f;
+        io.AddMousePosEvent(pointer.X * scaleX, pointer.Y * scaleY);
+
+        if (!input.IsGenericMotion)
         {
-            Logger.Error(nameof(ImGuiInputHandler), ex.ToString());
+            DispatchJavaTouchAction(io, input, pointers, pointerCount, actionIndex);
+            return;
         }
-        r.Load();
-        return r.GetFuncPtr(rva);
+
+        UpdateJavaMouseButtons(io, input.ButtonState);
+        if (input.HorizontalScroll != 0.0f || input.VerticalScroll != 0.0f)
+            io.AddMouseWheelEvent(input.HorizontalScroll, input.VerticalScroll);
+    }
+
+    private static void DispatchJavaTouchAction(
+        ImGuiIOPtr io,
+        AndroidInputEventInfo input,
+        ReadOnlySpan<AndroidInputPointerInfo> pointers,
+        int pointerCount,
+        int actionIndex)
+    {
+        AndroidInput.MotionAction action = (AndroidInput.MotionAction)input.Action;
+        int actionPointerId = pointers[actionIndex].Id;
+        switch (action)
+        {
+            case AndroidInput.MotionAction.Down:
+            case AndroidInput.MotionAction.PointerDown:
+                if (s_javaPrimaryPointerId < 0 || action == AndroidInput.MotionAction.Down)
+                    s_javaPrimaryPointerId = actionPointerId;
+                if (actionPointerId == s_javaPrimaryPointerId)
+                    io.AddMouseButtonEvent(0, true);
+                break;
+
+            case AndroidInput.MotionAction.PointerUp:
+                if (actionPointerId == s_javaPrimaryPointerId)
+                {
+                    int replacementIndex = -1;
+                    for (int index = 0; index < pointerCount; index++)
+                    {
+                        if (index != actionIndex)
+                        {
+                            replacementIndex = index;
+                            break;
+                        }
+                    }
+
+                    if (replacementIndex >= 0)
+                    {
+                        s_javaPrimaryPointerId = pointers[replacementIndex].Id;
+                        float scaleX = input.ViewportWidth > 0
+                            ? io.DisplaySize.X / input.ViewportWidth
+                            : 1.0f;
+                        float scaleY = input.ViewportHeight > 0
+                            ? io.DisplaySize.Y / input.ViewportHeight
+                            : 1.0f;
+                        io.AddMousePosEvent(
+                            pointers[replacementIndex].X * scaleX,
+                            pointers[replacementIndex].Y * scaleY);
+                    }
+                    else
+                    {
+                        s_javaPrimaryPointerId = -1;
+                        io.AddMouseButtonEvent(0, false);
+                    }
+                }
+                break;
+
+            case AndroidInput.MotionAction.Up:
+            case AndroidInput.MotionAction.Cancel:
+                s_javaPrimaryPointerId = -1;
+                io.AddMouseButtonEvent(0, false);
+                break;
+        }
+    }
+
+    private static void DispatchJavaKeyEvent(
+        ImGuiIOPtr io,
+        AndroidInputEventInfo input)
+    {
+        const int KeyActionDown = 0;
+        const int KeyActionUp = 1;
+        bool isDown = input.Action == KeyActionDown;
+        if (input.Action is KeyActionDown or KeyActionUp)
+        {
+            ImGuiKey key = MapAndroidKeyCode(input.KeyCode);
+            if (key != ImGuiKey.None)
+                io.AddKeyEvent(key, isDown);
+        }
+
+        int meta = input.MetaState;
+        io.AddKeyEvent((ImGuiKey)4096, (meta & 0x1000) != 0);  // Ctrl
+        io.AddKeyEvent((ImGuiKey)8192, (meta & 0x0001) != 0);  // Shift
+        io.AddKeyEvent((ImGuiKey)16384, (meta & 0x0002) != 0); // Alt
+        io.AddKeyEvent((ImGuiKey)32768, (meta & 0x10000) != 0); // Meta/Super
+
+        if (isDown && !s_wantTextInputLast && input.UnicodeCodePoint > 0
+            && !char.IsControl((char)input.UnicodeCodePoint))
+        {
+            io.AddInputCharacter((uint)input.UnicodeCodePoint);
+        }
+    }
+
+    private static ImGuiKey MapAndroidKeyCode(int keyCode)
+    {
+        if (keyCode is >= 29 and <= 54)
+            return (ImGuiKey)(546 + keyCode - 29); // A-Z
+        if (keyCode is >= 7 and <= 16)
+            return (ImGuiKey)(536 + keyCode - 7); // 0-9
+        if (keyCode is >= 131 and <= 142)
+            return (ImGuiKey)(572 + keyCode - 131); // F1-F12
+        if (keyCode is >= 144 and <= 153)
+            return (ImGuiKey)(612 + keyCode - 144); // Keypad 0-9
+
+        return keyCode switch
+        {
+            61 => (ImGuiKey)512,  // Tab
+            21 => (ImGuiKey)513,  // Left
+            22 => (ImGuiKey)514,  // Right
+            19 => (ImGuiKey)515,  // Up
+            20 => (ImGuiKey)516,  // Down
+            92 => (ImGuiKey)517,  // PageUp
+            93 => (ImGuiKey)518,  // PageDown
+            122 => (ImGuiKey)519, // Home
+            123 => (ImGuiKey)520, // End
+            124 => (ImGuiKey)521, // Insert
+            112 => ImGuiKey.Delete,
+            67 => ImGuiKey.Backspace,
+            62 => (ImGuiKey)524,  // Space
+            66 => ImGuiKey.Enter,
+            111 => (ImGuiKey)526, // Escape
+            113 => (ImGuiKey)527, // Left Ctrl
+            59 => (ImGuiKey)528,  // Left Shift
+            57 => (ImGuiKey)529,  // Left Alt
+            117 => (ImGuiKey)530, // Left Meta
+            114 => (ImGuiKey)531, // Right Ctrl
+            60 => (ImGuiKey)532,  // Right Shift
+            58 => (ImGuiKey)533,  // Right Alt
+            118 => (ImGuiKey)534, // Right Meta
+            82 => (ImGuiKey)535,  // Menu
+            55 => (ImGuiKey)597,  // Comma
+            69 => (ImGuiKey)598,  // Minus
+            56 => (ImGuiKey)599,  // Period
+            76 => (ImGuiKey)600,  // Slash
+            74 => (ImGuiKey)601,  // Semicolon
+            70 => (ImGuiKey)602,  // Equal
+            71 => (ImGuiKey)603,  // Left bracket
+            73 => (ImGuiKey)604,  // Backslash
+            72 => (ImGuiKey)605,  // Right bracket
+            68 => (ImGuiKey)606,  // Grave
+            115 => (ImGuiKey)607, // Caps lock
+            116 => (ImGuiKey)608, // Scroll lock
+            143 => (ImGuiKey)609, // Num lock
+            120 => (ImGuiKey)610, // Print screen
+            121 => (ImGuiKey)611, // Pause
+            154 => (ImGuiKey)623, // Keypad divide
+            155 => (ImGuiKey)624, // Keypad multiply
+            156 => (ImGuiKey)625, // Keypad subtract
+            157 => (ImGuiKey)626, // Keypad add
+            160 => (ImGuiKey)627, // Keypad enter
+            161 => (ImGuiKey)628, // Keypad equal
+            4 => (ImGuiKey)629,   // App back
+            125 => (ImGuiKey)630, // App forward
+            75 => (ImGuiKey)596,  // Apostrophe
+            158 => (ImGuiKey)622, // Keypad decimal
+            _ => ImGuiKey.None,
+        };
+    }
+
+    private static void UpdateJavaMouseButtons(ImGuiIOPtr io, int buttonState)
+    {
+        io.AddMouseButtonEvent(0, (buttonState & 0x01) != 0); // primary
+        io.AddMouseButtonEvent(1, (buttonState & 0x02) != 0); // secondary
+        io.AddMouseButtonEvent(2, (buttonState & 0x04) != 0); // tertiary
+        io.AddMouseButtonEvent(3, (buttonState & 0x08) != 0); // back
+        io.AddMouseButtonEvent(4, (buttonState & 0x10) != 0); // forward
     }
 
     private static JavaClass? s_utilsClass;
