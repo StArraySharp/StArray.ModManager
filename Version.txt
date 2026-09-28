@@ -1,0 +1,5 @@
+AssemblyVersion=1.0.0.0
+AssemblyInformationalVersion=.1.0.0+bc0f28eefb47c5784a8381e0ace93facbfd917f8
+SourceCommit=bc0f28eefb47c5784a8381e0ace93facbfd917f8
+ActionsRun=36426384490
+ArtifactSha256=b9dbc1cd635784542d6ef4f2bf06b1d5f80b6bb3770ecdb9fa10cec87cddfc44
