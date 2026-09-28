@@ -104,7 +104,8 @@ public class ModManagerUpdater {
         try {
             if (Files.exists(localDll) && Files.exists(localVerFile)) {
                 localVersion = JSON.parseObject(new String(Files.readAllBytes(localVerFile)), VersionInfo.class);
-                Log.i(TAG, "Local version: " + localVersion.version + " (code=" + localVersion.versionCode + ")");
+                Log.i(TAG, "Local Android manager version: " + localVersion.androidVersion()
+                        + " (code=" + localVersion.androidVersionCode() + ")");
             } else {
                 Log.i(TAG, "No local manager found");
             }
@@ -116,7 +117,7 @@ public class ModManagerUpdater {
 
         // 有本地版本 → 先启动，后台检查更新
         if (hasLocal) {
-            Log.i(TAG, "Launching existing manager v" + localVersion.version);
+            Log.i(TAG, "Launching existing manager v" + localVersion.androidVersion());
             launch(managerDir, runtimeDir, modsDir, useNewThread);
         } else {
             Log.i(TAG, "No local manager found, will download");
@@ -140,18 +141,31 @@ public class ModManagerUpdater {
                             activity.runOnUiThread(() -> showError("无法连接服务器，且本地无可用管理器"));
                         return;
                     }
-                    Log.i(TAG, "Remote version: " + remote.version + " (code=" + remote.versionCode + ")");
+                    PlatformInfo remoteAndroid = remote.android();
+                    if (remoteAndroid == null
+                            || remoteAndroid.version == null || remoteAndroid.version.isEmpty()
+                            || remoteAndroid.versionCode <= 0
+                            || remoteAndroid.managerUrl == null || remoteAndroid.managerUrl.isEmpty()) {
+                        Log.w(TAG, "Remote manifest has no valid Android platform update entry");
+                        if (!hasLocal)
+                            activity.runOnUiThread(() -> showError("服务器未提供 Android 管理器更新信息"));
+                        return;
+                    }
+                    int localVersionCode = hasLocal ? finalLocalVersion.androidVersionCode() : 0;
+                    Log.i(TAG, "Remote Android manager version: " + remoteAndroid.version
+                            + " (code=" + remoteAndroid.versionCode + ")");
                     boolean needUpdate = !hasLocal
-                            || finalLocalVersion.versionCode < remote.versionCode;
+                            || localVersionCode < remoteAndroid.versionCode;
                     Log.i(TAG, "needUpdate=" + needUpdate + " hasLocal=" + hasLocal);
                     if (!needUpdate) {
                         Log.i(TAG, "Manager is up to date");
                         if (!hasLocal) launch(managerDir, runtimeDir, modsDir, useNewThread);
                     } else if (hasLocal) {
-                        Log.i(TAG, "Update available: v" + finalLocalVersion.version + " → v" + remote.version);
+                        Log.i(TAG, "Update available: v" + finalLocalVersion.androidVersion()
+                                + " → v" + remoteAndroid.version);
                         activity.runOnUiThread(() -> showUpdateDialog(remote, managerDir, runtimeDir, modsDir, useNewThread));
                     } else {
-                        Log.i(TAG, "First install: downloading v" + remote.version);
+                        Log.i(TAG, "First install: downloading v" + remoteAndroid.version);
                         activity.runOnUiThread(() -> showDownloadDialog(remote, managerDir, runtimeDir, modsDir, false, useNewThread));
                     }
                 })
@@ -164,10 +178,10 @@ public class ModManagerUpdater {
     // ──── 对话框 ────
 
     private void showUpdateDialog(VersionInfo remote, Path mgr, Path rt, Path mods, boolean useNewThread) {
-        Log.i(TAG, "Showing update dialog for v" + remote.version);
+        Log.i(TAG, "Showing update dialog for v" + remote.androidVersion());
         new AlertDialog.Builder(activity)
                 .setTitle("ModManager")
-                .setMessage("有可用更新！\nv" + remote.version + "\n是否更新？")
+                .setMessage("有可用更新！\nv" + remote.androidVersion() + "\n是否更新？")
                 .setPositiveButton("更新", (d, w) -> {
                     d.dismiss();
                     showDownloadDialog(remote, mgr, rt, mods, true, useNewThread);
@@ -241,7 +255,7 @@ public class ModManagerUpdater {
 
     private Path downloadAndExtractSync(VersionInfo version, Path targetDir, AlertDialog dialog) {
         try {
-            Log.i(TAG, "Downloading v" + version.version + " → " + targetDir);
+            Log.i(TAG, "Downloading v" + version.androidVersion() + " → " + targetDir);
             Files.createDirectories(targetDir);
             var zipFile = targetDir.getParent().resolve("manager-download.zip");
 
@@ -377,12 +391,26 @@ public class ModManagerUpdater {
             var p = android();
             return p != null ? p.sha256 : null;
         }
+
+        public String androidVersion() {
+            var p = android();
+            return p != null && p.version != null && !p.version.isEmpty() ? p.version : version;
+        }
+
+        public int androidVersionCode() {
+            var p = android();
+            return p != null && p.versionCode > 0 ? p.versionCode : versionCode;
+        }
     }
 
-    /** platforms 数组元素（name/manager/sha256/entryAssembly/entryMethod）。 */
+    /** platforms 数组元素（name/version/versionCode/manager/sha256/entryAssembly/entryMethod）。 */
     public static class PlatformInfo {
         @JSONField(name = "name")
         public String name;
+        @JSONField(name = "version")
+        public String version;
+        @JSONField(name = "versionCode")
+        public int versionCode;
         @JSONField(name = "manager")
         public String managerUrl;
         @JSONField(name = "sha256")
@@ -521,4 +549,3 @@ public class ModManagerUpdater {
 
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 }
-

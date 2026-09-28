@@ -1,5 +1,6 @@
 #!/bin/bash
 # 一键打包 release zip 包（version.json 的 platforms[].manager 对应产物）：
+# Android 新包以 platforms[name=android].version/versionCode 检查更新；根级字段保留给旧包，Windows 元数据不变。
 #   release/modmanager-windows.zip  — Windows SMM（manager/ 布局，供 Setup 热更新）
 #   release/modmanager-android.zip  — Android SMM 托管程序集
 # 用法: bash Scripts/package_release.sh
