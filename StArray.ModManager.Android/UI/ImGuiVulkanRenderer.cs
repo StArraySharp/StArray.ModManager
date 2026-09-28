@@ -350,9 +350,11 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             var io = ImGui.GetIO();
             io.DisplaySize = new Vector2(self._fbWidth, self._fbHeight);
 
+            StArray.ModManager.Android.Native.AndroidJavaInputBridge.DispatchPendingImGuiEvents();
             ImGui.NewFrame();
             self.BuildUI();
             ImGuiInputHandler.UpdateIme();
+            StArray.ModManager.Android.Native.AndroidJavaInputBridge.UpdateCaptureState();
             ImGui.Render();
 
             // 录制 Vulkan 命令

@@ -121,11 +121,13 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             var io = ImGui.GetIO();
             io.DisplaySize = new Vector2(width, height);
 
+            StArray.ModManager.Android.Native.AndroidJavaInputBridge.DispatchPendingImGuiEvents();
             ImGui.NewFrame();
 
             // 构建 UI
             self.BuildUI();
             ImGuiInputHandler.UpdateIme();
+            StArray.ModManager.Android.Native.AndroidJavaInputBridge.UpdateCaptureState();
             // 渲染
             ImGui.Render();
             ImGuiImplOpenGL3.RenderDrawData((IntPtr)ImGui.GetDrawData().NativePtr);

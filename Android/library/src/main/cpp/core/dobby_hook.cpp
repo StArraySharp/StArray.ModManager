@@ -1,4 +1,3 @@
-#include <jni.h>
 #include <cstdint>
 #include <android/log.h>
 
