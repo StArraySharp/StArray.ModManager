@@ -8,9 +8,11 @@ namespace StArray.ModManager.Android.UI;
 /// <summary>ImGui input handler / 输入处理器 — Java bridge input + IME control</summary>
 public static partial class ImGuiInputHandler
 {
+    private const int AndroidMotionSourceMask = 0x0000FF00;
+    private const int AndroidTouchscreenSource = 0x00001000;
+
     /// <summary>ImGui 上下文就绪后由渲染器设置</summary>
     public static bool IsInitialized { get; set; }
-    
 
     private static bool s_wantTextInputLast;
     private static int s_javaPrimaryPointerId = -1;
@@ -107,14 +109,19 @@ public static partial class ImGuiInputHandler
         float scaleY = input.ViewportHeight > 0
             ? io.DisplaySize.Y / input.ViewportHeight
             : 1.0f;
-        io.AddMousePosEvent(pointer.X * scaleX, pointer.Y * scaleY);
-
+        float mouseX = pointer.X * scaleX;
+        float mouseY = pointer.Y * scaleY;
         if (!input.IsGenericMotion)
         {
-            DispatchJavaTouchAction(io, input, pointers, pointerCount, actionIndex);
+            bool allowTouchScroll = pointerCount == 1
+                && (input.Source & AndroidMotionSourceMask) == AndroidTouchscreenSource;
+            DispatchJavaTouchAction(
+                io, input, pointers, pointerCount, actionIndex, mouseX, mouseY,
+                allowTouchScroll);
             return;
         }
 
+        io.AddMousePosEvent(mouseX, mouseY);
         UpdateJavaMouseButtons(io, input.ButtonState);
         if (input.HorizontalScroll != 0.0f || input.VerticalScroll != 0.0f)
             io.AddMouseWheelEvent(input.HorizontalScroll, input.VerticalScroll);
@@ -125,18 +132,32 @@ public static partial class ImGuiInputHandler
         AndroidInputEventInfo input,
         ReadOnlySpan<AndroidInputPointerInfo> pointers,
         int pointerCount,
-        int actionIndex)
+        int actionIndex,
+        float mouseX,
+        float mouseY,
+        bool allowTouchScroll)
     {
         AndroidInput.MotionAction action = (AndroidInput.MotionAction)input.Action;
         int actionPointerId = pointers[actionIndex].Id;
+        if (action == AndroidInput.MotionAction.Move && allowTouchScroll && HandleTouchScrollMove(io, mouseX, mouseY))
+            return;
+
+        io.AddMousePosEvent(mouseX, mouseY);
         switch (action)
         {
             case AndroidInput.MotionAction.Down:
             case AndroidInput.MotionAction.PointerDown:
                 if (s_javaPrimaryPointerId < 0 || action == AndroidInput.MotionAction.Down)
+                {
                     s_javaPrimaryPointerId = actionPointerId;
+                    EndTouchGesture();
+                    if (allowTouchScroll && action == AndroidInput.MotionAction.Down)
+                        BeginTouchGesture(mouseX, mouseY);
+                }
                 if (actionPointerId == s_javaPrimaryPointerId)
                     io.AddMouseButtonEvent(0, true);
+                if (action == AndroidInput.MotionAction.PointerDown)
+                    EndTouchGesture();
                 break;
 
             case AndroidInput.MotionAction.PointerUp:
@@ -164,11 +185,13 @@ public static partial class ImGuiInputHandler
                         io.AddMousePosEvent(
                             pointers[replacementIndex].X * scaleX,
                             pointers[replacementIndex].Y * scaleY);
+                        EndTouchGesture();
                     }
                     else
                     {
                         s_javaPrimaryPointerId = -1;
                         io.AddMouseButtonEvent(0, false);
+                        EndTouchGesture();
                     }
                 }
                 break;
@@ -177,6 +200,7 @@ public static partial class ImGuiInputHandler
             case AndroidInput.MotionAction.Cancel:
                 s_javaPrimaryPointerId = -1;
                 io.AddMouseButtonEvent(0, false);
+                EndTouchGesture();
                 break;
         }
     }

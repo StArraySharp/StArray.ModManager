@@ -351,8 +351,10 @@ public sealed unsafe class ImGuiVulkanRenderer : IImGuiRenderer
             io.DisplaySize = new Vector2(self._fbWidth, self._fbHeight);
 
             StArray.ModManager.Android.Native.AndroidJavaInputBridge.DispatchPendingImGuiEvents();
+            ImGuiInputHandler.ApplyTouchScroll();
             ImGui.NewFrame();
             self.BuildUI();
+            ImGuiInputHandler.UpdateTouchScrollState();
             ImGuiInputHandler.UpdateIme();
             StArray.ModManager.Android.Native.AndroidJavaInputBridge.UpdateCaptureState();
             ImGui.Render();
