@@ -22,7 +22,10 @@ public partial class ModManagerUI
     private ModManagerConfig _config = new();
     private readonly string _configDir;
 
-    private bool _showAddModPopup;
+    private readonly Func<Task<ModInstallFile?>>? _pickModFile;
+    private Task<ModInstallPackage?>? _modInstallTask;
+    private ModUpdateConfirmation? _modUpdateConfirmation;
+    private bool _openModUpdatePopup;
     private string? _expandedModId;
 
     // 通知
@@ -36,8 +39,13 @@ public partial class ModManagerUI
 
     /// <summary>初始化 UI，加载配置并扫描 Mod</summary>
     public ModManagerUI(ModLoader modManager, string configDir)
+        : this(modManager, configDir, null) { }
+
+    /// <summary>初始化 UI，并接入平台的 Mod 文件选择器。</summary>
+    public ModManagerUI(ModLoader modManager, string configDir, Func<Task<ModInstallFile?>>? pickModFile)
     {
         _modManager = modManager;
+        _pickModFile = pickModFile;
         Logger.OnLog += OnLogMessage;
 
         _configDir = configDir;
@@ -157,6 +165,8 @@ public partial class ModManagerUI
     /// </summary>
     public void Render()
     {
+        FinishModInstall();
+
         // F10 切换管理器隐藏/显示
         if (ImGui.IsKeyPressed(ImGuiKey.F10))
             _visible = !_visible;
@@ -202,7 +212,7 @@ public partial class ModManagerUI
 
         RenderMainWindow();
         RenderModSettingsWindow();
-        RenderAddModPopup();
+        RenderModUpdatePopup();
         RenderToast();
 
         // ── BehaviourManager: OnGUI（ImGui 窗口绘制之后） ──
@@ -234,8 +244,7 @@ public partial class ModManagerUI
                         AutoEnableMods();
                     }
                     ImGui.SameLine();
-                    if (ImGui.Button(FontAwesome7.Plus + " " + L10n.Get("Btn_AddMod")))
-                        _showAddModPopup = true;
+                    RenderAddModButton();
 
                     ImGui.Separator();
 

@@ -72,9 +72,11 @@ public static class Managed
         
         _ = RuntimeManager.Detect();
         var loader = new ModLoader(modsPath, AssemblyPath is { } ap ? Path.GetDirectoryName(ap) : null);
-        var ui = new ModManagerUI(loader, Path.GetDirectoryName(AssemblyPath)!);
+        var picker = new AndroidModFilePicker(modsPath);
+        var ui = new ModManagerUI(loader, Path.GetDirectoryName(AssemblyPath)!, picker.PickAsync);
         HookHelper.Instance = new DobbyHook();
         ImGuiEGLRender.OnRender += ui.Render;
+        ImGuiEGLRender.OnRender += picker.Render;
         ImGuiEGLRender.Install();
 
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {Benchmark.End():F3}s ===");

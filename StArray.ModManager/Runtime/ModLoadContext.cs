@@ -13,8 +13,8 @@ namespace StArray.ModManager.Runtime;
 /// 为真实路径，mod 可定位同目录资源；文件被内存映射锁定，直到 Unload + GC 回收
 /// （collectible 下锁是暂时的）</item>
 /// <item><see cref="LoadMetadataFromPath"/>（探测）：流式加载不锁文件，Location 为空</item>
-/// <item>依赖解析（<see cref="AssemblyLoadContext.Load"/>）走路径加载，
-/// 与主程序集一致；优先 mod 目录，其次管理器目录，系统库交默认上下文</item>
+/// <item>依赖解析（<see cref="AssemblyLoadContext.Load"/>）与本上下文的用途一致：
+/// 正式加载使用文件路径，探测时使用流；优先 mod 目录，其次管理器目录</item>
 /// <item><see cref="Unload"/> 后（所有实例与 Type 释放）程序集真正卸载、文件解锁</item>
 /// </list>
 /// </remarks>
@@ -22,6 +22,7 @@ public sealed class ModLoadContext : AssemblyLoadContext
 {
     private readonly string _baseDir;
     private readonly string? _managerDir;
+    private readonly bool _metadataOnly;
 
     /// <summary>宿主上下文（SMM 本体所在的 ALC）——其中的程序集在 mod 侧必须保持同一身份。</summary>
     private static readonly AssemblyLoadContext HostContext =
@@ -31,10 +32,14 @@ public sealed class ModLoadContext : AssemblyLoadContext
     public event Action<ModLoadContext, AssemblyName>? OnResolveFailure;
 
     public ModLoadContext(string name, string baseDir, string? managerDir = null)
+        : this(name, baseDir, managerDir, metadataOnly: false) { }
+
+    internal ModLoadContext(string name, string baseDir, string? managerDir, bool metadataOnly)
         : base(name, isCollectible: true)
     {
         _baseDir = baseDir;
         _managerDir = managerDir;
+        _metadataOnly = metadataOnly;
     }
 
     protected override Assembly? Load(AssemblyName assemblyName)
@@ -69,7 +74,7 @@ public sealed class ModLoadContext : AssemblyLoadContext
 
         try
         {
-            return LoadFromAssemblyPath(Path.GetFullPath(path));
+            return _metadataOnly ? LoadMetadataFromPath(path) : LoadFromAssemblyPath(Path.GetFullPath(path));
         }
         catch
         {

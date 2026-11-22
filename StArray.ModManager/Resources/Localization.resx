@@ -77,4 +77,34 @@
     <data name="Log_AutoEnable" xml:space="preserve"><value>自动启用: {0}</value></data>
     <data name="Log_SaveSettings" xml:space="preserve"><value>SaveSettings: {0}</value></data>
     <data name="Log_LoadSettings" xml:space="preserve"><value>LoadSettings: {0}</value></data>
+    <data name="ModInstall_PickerTitle" xml:space="preserve"><value>选择 Mod 文件</value></data>
+    <data name="ModInstall_FileFilter" xml:space="preserve"><value>Mod 文件 (*.zip;*.dll)</value></data>
+    <data name="ModInstall_FileHint" xml:space="preserve"><value>选择 .dll 或 .zip 文件。如果 Mod 有依赖，请使用 .zip。</value></data>
+    <data name="ModInstall_InProgress" xml:space="preserve"><value>正在选择或安装 Mod…</value></data>
+    <data name="ModInstall_Confirm" xml:space="preserve"><value>安装</value></data>
+    <data name="ModInstall_Cancel" xml:space="preserve"><value>取消</value></data>
+    <data name="ModInstall_Success" xml:space="preserve"><value>已安装 {0}，可在列表中启用。</value></data>
+    <data name="ModInstall_Failed" xml:space="preserve"><value>安装失败：{0}</value></data>
+    <data name="ModInstall_Unsupported" xml:space="preserve"><value>请选择 .dll 或 .zip 文件。</value></data>
+    <data name="ModInstall_NoEntry" xml:space="preserve"><value>未找到可识别的 Mod。请选择 Mod 的入口 DLL，或包含一个 Mod 及其依赖的 ZIP。</value></data>
+    <data name="ModInstall_FolderExists" xml:space="preserve"><value>Mods 目录中已存在 {0}。</value></data>
+    <data name="ModInstall_WindowsPickerError" xml:space="preserve"><value>无法打开文件选择器（错误 {0}）。</value></data>
+    <data name="ModInstall_Downloads" xml:space="preserve"><value>下载目录</value></data>
+    <data name="ModInstall_ImportFolder" xml:space="preserve"><value>导入目录</value></data>
+    <data name="ModInstall_ParentFolder" xml:space="preserve"><value>上一级</value></data>
+    <data name="ModInstall_Refresh" xml:space="preserve"><value>刷新</value></data>
+    <data name="ModInstall_ReadingFolder" xml:space="preserve"><value>正在读取目录…</value></data>
+    <data name="ModInstall_FolderReadError" xml:space="preserve"><value>无法读取此目录：{0}</value></data>
+    <data name="ModInstall_EmptyFolder" xml:space="preserve"><value>此目录没有可安装的 .zip 或 .dll 文件。</value></data>
+    <data name="ModInstall_ImportHint" xml:space="preserve"><value>如果下载目录中的文件不可见，可先打开导入目录，再用文件管理器把 .zip 或 .dll 复制到 {0}，最后刷新。</value></data>
+    <data name="ModInstall_IdConflict" xml:space="preserve"><value>已安装的 Mod ID {0} 存在冲突，无法确定要覆盖的条目。</value></data>
+    <data name="ModInstall_UpdateTitle" xml:space="preserve"><value>覆盖已安装的 Mod</value></data>
+    <data name="ModInstall_UpdatePrompt" xml:space="preserve"><value>将 {0} 从版本 {1} 替换为 {2}。重启游戏后生效。只覆盖新版包中包含的文件，其余文件会保留。</value></data>
+    <data name="ModInstall_UpdateConfirm" xml:space="preserve"><value>确认覆盖</value></data>
+    <data name="ModInstall_UpdateQueued" xml:space="preserve"><value>{0} 的更新已准备好，重启游戏后生效。</value></data>
+    <data name="ModInstall_UpdateAlreadyQueued" xml:space="preserve"><value>{0} 已有待应用的更新，请先重启游戏。</value></data>
+    <data name="ModInstall_UpdateTargetInvalid" xml:space="preserve"><value>无法验证 Mod {0} 的安装目录或入口 DLL。</value></data>
+    <data name="ModInstall_UpdateBackup" xml:space="preserve"><value>无法恢复旧版，备份保留在 {0}。错误：{1}</value></data>
+    <data name="ModInstall_UpdateApplied" xml:space="preserve"><value>已应用 Mod {0} 的更新。</value></data>
+    <data name="ModInstall_UpdatePathConflict" xml:space="preserve"><value>无法更新 {0}，文件与目录占用了同一路径。</value></data>
 </root>

@@ -74,4 +74,34 @@
     <data name="Log_AutoEnable" xml:space="preserve"><value>Auto-enabled: {0}</value></data>
     <data name="Log_SaveSettings" xml:space="preserve"><value>SaveSettings: {0}</value></data>
     <data name="Log_LoadSettings" xml:space="preserve"><value>LoadSettings: {0}</value></data>
+    <data name="ModInstall_PickerTitle" xml:space="preserve"><value>Choose a Mod File</value></data>
+    <data name="ModInstall_FileFilter" xml:space="preserve"><value>Mod files (*.zip;*.dll)</value></data>
+    <data name="ModInstall_FileHint" xml:space="preserve"><value>Choose a .dll or .zip file. Use .zip for mods with dependencies.</value></data>
+    <data name="ModInstall_InProgress" xml:space="preserve"><value>Selecting or installing a mod…</value></data>
+    <data name="ModInstall_Confirm" xml:space="preserve"><value>Install</value></data>
+    <data name="ModInstall_Cancel" xml:space="preserve"><value>Cancel</value></data>
+    <data name="ModInstall_Success" xml:space="preserve"><value>Installed {0}. You can enable it in the mod list.</value></data>
+    <data name="ModInstall_Failed" xml:space="preserve"><value>Installation failed: {0}</value></data>
+    <data name="ModInstall_Unsupported" xml:space="preserve"><value>Choose a .dll or .zip file.</value></data>
+    <data name="ModInstall_NoEntry" xml:space="preserve"><value>No mod could be recognized. Choose its entry DLL or a ZIP containing one mod and its dependencies.</value></data>
+    <data name="ModInstall_FolderExists" xml:space="preserve"><value>The mods directory already contains {0}.</value></data>
+    <data name="ModInstall_WindowsPickerError" xml:space="preserve"><value>Could not open the file picker (error {0}).</value></data>
+    <data name="ModInstall_Downloads" xml:space="preserve"><value>Downloads</value></data>
+    <data name="ModInstall_ImportFolder" xml:space="preserve"><value>Import folder</value></data>
+    <data name="ModInstall_ParentFolder" xml:space="preserve"><value>Up</value></data>
+    <data name="ModInstall_Refresh" xml:space="preserve"><value>Refresh</value></data>
+    <data name="ModInstall_ReadingFolder" xml:space="preserve"><value>Reading folder…</value></data>
+    <data name="ModInstall_FolderReadError" xml:space="preserve"><value>Could not read this folder: {0}</value></data>
+    <data name="ModInstall_EmptyFolder" xml:space="preserve"><value>There are no .zip or .dll files to install in this folder.</value></data>
+    <data name="ModInstall_ImportHint" xml:space="preserve"><value>If your download is not visible, open Import folder, use a file manager to copy your .zip or .dll file to {0}, then refresh.</value></data>
+    <data name="ModInstall_IdConflict" xml:space="preserve"><value>Mod ID {0} conflicts with an installed entry. The update target is ambiguous.</value></data>
+    <data name="ModInstall_UpdateTitle" xml:space="preserve"><value>Replace Installed Mod</value></data>
+    <data name="ModInstall_UpdatePrompt" xml:space="preserve"><value>Replace {0} version {1} with {2}. Restart the game to apply the update. Only files included in the new package are replaced.</value></data>
+    <data name="ModInstall_UpdateConfirm" xml:space="preserve"><value>Replace</value></data>
+    <data name="ModInstall_UpdateQueued" xml:space="preserve"><value>The update for {0} is ready. Restart the game to apply it.</value></data>
+    <data name="ModInstall_UpdateAlreadyQueued" xml:space="preserve"><value>An update for {0} is already queued. Restart the game first.</value></data>
+    <data name="ModInstall_UpdateTargetInvalid" xml:space="preserve"><value>Could not verify the installed folder or entry DLL for mod {0}.</value></data>
+    <data name="ModInstall_UpdateBackup" xml:space="preserve"><value>Could not restore the previous version. The backup remains at {0}. Error: {1}</value></data>
+    <data name="ModInstall_UpdateApplied" xml:space="preserve"><value>Applied the update for mod {0}.</value></data>
+    <data name="ModInstall_UpdatePathConflict" xml:space="preserve"><value>Cannot update {0} because a file and a folder use the same path.</value></data>
 </root>
