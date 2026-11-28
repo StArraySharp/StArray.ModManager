@@ -109,6 +109,8 @@ public sealed unsafe class NativeUiSession : IDisposable
         => RequireCurrent().Add(source.Pointer, unityEvent.Pointer, CallbackKind.Empty, _ => callback());
     public static void Listen(NativeUiObject source, NativeUiObject unityEvent, Action<bool> callback)
         => RequireCurrent().Add(source.Pointer, unityEvent.Pointer, CallbackKind.Boolean, arg => callback(arg != 0));
+    public static void Listen(NativeUiObject source, NativeUiObject unityEvent, Action<int> callback)
+        => RequireCurrent().Add(source.Pointer, unityEvent.Pointer, CallbackKind.Integer, arg => callback(unchecked((int)arg)));
     public static void Listen(NativeUiObject source, NativeUiObject unityEvent, Action<float> callback)
         => RequireCurrent().Add(source.Pointer, unityEvent.Pointer, CallbackKind.Single, arg => callback(BitConverter.Int32BitsToSingle((int)arg)));
     public static void Listen(NativeUiObject source, NativeUiObject unityEvent, Action<string> callback)
@@ -230,7 +232,7 @@ public sealed unsafe class NativeUiSession : IDisposable
         }
     }
 
-    private enum CallbackKind { Empty, Boolean, Single, String, EventData }
+    private enum CallbackKind { Empty, Boolean, Integer, Single, String, EventData }
 
     private sealed class EventBinding
     {
@@ -271,6 +273,7 @@ public sealed unsafe class NativeUiSession : IDisposable
             string expected = kind switch
             {
                 CallbackKind.Boolean => "System.Boolean",
+                CallbackKind.Integer => "System.Int32",
                 CallbackKind.Single => "System.Single",
                 CallbackKind.String => "System.String",
                 CallbackKind.EventData => "UnityEngine.EventSystems.BaseEventData",
@@ -358,6 +361,7 @@ public sealed unsafe class NativeUiSession : IDisposable
         {
             CallbackKind.Empty => (nint)(delegate* unmanaged<nint, nint, void>)&DispatchEmpty,
             CallbackKind.Boolean => (nint)(delegate* unmanaged<nint, byte, nint, void>)&DispatchBoolean,
+            CallbackKind.Integer => (nint)(delegate* unmanaged<nint, int, nint, void>)&DispatchInteger,
             CallbackKind.Single => (nint)(delegate* unmanaged<nint, float, nint, void>)&DispatchSingle,
             _ => (nint)(delegate* unmanaged<nint, nint, nint, void>)&DispatchReference,
         };
@@ -369,6 +373,8 @@ public sealed unsafe class NativeUiSession : IDisposable
     private static void DispatchEmpty(nint target, nint method) => Dispatch(target, 0);
     [UnmanagedCallersOnly]
     private static void DispatchBoolean(nint target, byte value, nint method) => Dispatch(target, value);
+    [UnmanagedCallersOnly]
+    private static void DispatchInteger(nint target, int value, nint method) => Dispatch(target, value);
     [UnmanagedCallersOnly]
     private static void DispatchSingle(nint target, float value, nint method) => Dispatch(target, BitConverter.SingleToInt32Bits(value));
     [UnmanagedCallersOnly]
