@@ -18,7 +18,7 @@
       "version": "1.0.6",
       "versionCode": 14,
       "manager": "https://github.com/StArraySharp/StArray.ModManager/releases/download/1.0.6/modmanager-android.zip",
-      "sha256": "09d25c26ee023225dfe1af7beaa852633d43184d3efecd43bf160a950375aea9",
+      "sha256": "6b82345d32edb715b7d00ec8bf2fe3e8fd0a0ac00494ce0c3a5517682a351000",
       "entryAssembly": "StArray.ModManager.Android.dll",
       "entryMethod": "StArray.ModManager.Android.Managed::Entry"
     }
