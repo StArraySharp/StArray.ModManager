@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using StArray.ModManager.Il2Cpp;
@@ -14,12 +15,16 @@ public sealed unsafe class NativeUiSession : IDisposable
     private static readonly ConcurrentDictionary<nint, Listener> Callbacks = new();
     private static readonly Dictionary<nint, EventBinding> Bindings = [];
     private static readonly Dictionary<CallbackKind, nint> MethodRecords = [];
+    private static readonly TimeSpan DefaultBuildBudget = TimeSpan.FromMilliseconds(3);
+    private static bool _runtimeVerified;
     private static Il2CppClass? _object;
     private static Il2CppMethod? _isAlive;
     private readonly int _threadId = Environment.CurrentManagedThreadId;
     private readonly List<Listener> _listeners = [];
     private Exception? _callbackError;
+    private PageBuild? _pendingBuild;
     private int _framesUntilPrune;
+    private bool _building;
     private bool _disposed;
 
     private NativeUiSession() { }
@@ -31,12 +36,21 @@ public sealed unsafe class NativeUiSession : IDisposable
             throw new PlatformNotSupportedException("Native UGUI requires Android ARM64 IL2CPP.");
         if (il2cpp_thread_current() == 0)
             throw new InvalidOperationException("Open native UGUI on UnityMain.");
+        if (!Volatile.Read(ref _runtimeVerified))
+        {
+            VerifyRuntime();
+            Volatile.Write(ref _runtimeVerified, true);
+        }
+        return new NativeUiSession();
+    }
+
+    private static void VerifyRuntime()
+    {
         var app = NativeUi.FindClass("UnityEngine.CoreModule", "UnityEngine", "Application");
         var version = NativeUi.Resolve(app, "get_unityVersion", []).InvokeStatic();
         if (NativeUi.ReadString(version) != "6000.3.10f1")
             throw new PlatformNotSupportedException("Native UGUI currently supports Unity 6000.3.10f1.");
         VerifyMethodLayout();
-        return new NativeUiSession();
     }
 
     private void CheckThread()
@@ -64,11 +78,86 @@ public sealed unsafe class NativeUiSession : IDisposable
         public void Dispose() => _current = _previous;
     }
 
-    /// <summary>Releases listeners belonging to destroyed controls and surfaces callback failures.</summary>
+    /// <summary>Whether this session has scheduled page construction work.</summary>
+    public bool IsBuilding
+    {
+        get
+        {
+            CheckThread();
+            return _pendingBuild != null;
+        }
+    }
+
+    /// <summary>
+    /// Builds the page in ordered steps on subsequent Tick calls. Show the shell first,
+    /// then use small steps such as one control or row each. The default budget is 3 ms
+    /// per tick and is checked between steps.
+    /// </summary>
+    public void ScheduleBuild(int stepCount, Action<int> buildStep, TimeSpan? frameBudget = null)
+    {
+        CheckThread();
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentOutOfRangeException.ThrowIfNegative(stepCount);
+        ArgumentNullException.ThrowIfNull(buildStep);
+        var budget = frameBudget ?? DefaultBuildBudget;
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(budget, TimeSpan.Zero, nameof(frameBudget));
+        if (_pendingBuild != null)
+            throw new InvalidOperationException("This UGUI session already has a scheduled page build.");
+        if (stepCount != 0)
+            _pendingBuild = new PageBuild(stepCount, buildStep, budget);
+    }
+
+    /// <summary>Discards remaining steps. The mod still owns controls it has already created.</summary>
+    public void CancelBuild()
+    {
+        CheckThread();
+        _pendingBuild = null;
+    }
+
+    private sealed class PageBuild(int count, Action<int> step, TimeSpan budget)
+    {
+        private int _next;
+        internal TimeSpan Budget { get; } = budget;
+        internal bool Complete => _next == count;
+        internal void RunStep() => step(_next++);
+    }
+
+    private void BuildPage()
+    {
+        if (_pendingBuild is not { } build) return;
+        _building = true;
+        long start = Stopwatch.GetTimestamp();
+        try
+        {
+            using var scope = Enter();
+            do
+            {
+                build.RunStep();
+                if (_pendingBuild != build) return;
+                if (build.Complete)
+                {
+                    _pendingBuild = null;
+                    return;
+                }
+            } while (Stopwatch.GetElapsedTime(start) < build.Budget);
+        }
+        catch
+        {
+            if (_pendingBuild == build) _pendingBuild = null;
+            throw;
+        }
+        finally
+        {
+            _building = false;
+        }
+    }
+
+    /// <summary>Call once per Unity frame to run scheduled steps, prune destroyed controls and surface callback failures.</summary>
     public void Tick()
     {
         CheckThread();
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_building) return;
         if (_callbackError is { } error)
         {
             _callbackError = null;
@@ -77,16 +166,19 @@ public sealed unsafe class NativeUiSession : IDisposable
         if (_framesUntilPrune > 0)
         {
             _framesUntilPrune--;
-            return;
         }
-        _framesUntilPrune = 7; // Unity defers Destroy until the end of the frame.
-        for (int i = _listeners.Count - 1; i >= 0; i--)
+        else
         {
-            var listener = _listeners[i];
-            if (IsAlive(listener.Owner.Target)) continue;
-            _listeners.RemoveAt(i);
-            listener.Dispose();
+            _framesUntilPrune = 7; // Unity defers Destroy until the end of the frame.
+            for (int i = _listeners.Count - 1; i >= 0; i--)
+            {
+                var listener = _listeners[i];
+                if (IsAlive(listener.Owner.Target)) continue;
+                _listeners.RemoveAt(i);
+                listener.Dispose();
+            }
         }
+        BuildPage();
     }
 
     public void Dispose()
@@ -94,6 +186,7 @@ public sealed unsafe class NativeUiSession : IDisposable
         CheckThread();
         if (_disposed) return;
         _disposed = true;
+        _pendingBuild = null;
         Exception? failure = null;
         for (int i = _listeners.Count - 1; i >= 0; i--)
         {
@@ -124,11 +217,12 @@ public sealed unsafe class NativeUiSession : IDisposable
         var session = RequireCurrent();
         var api = PointerBindings.Instance;
         nint owner = gameObject.Pointer;
-        nint trigger = api.AddComponent.Invoke(owner, [api.Trigger.GetTypeObject()]);
+        nint trigger = api.AddComponent.Invoke(owner, [api.TriggerType.Target]);
         using var triggerRoot = new UiRoot(trigger);
         nint entries = api.GetTriggers.Invoke(trigger);
         using var listRoot = new UiRoot(entries);
-        var add = NativeUi.Resolve(new Il2CppClass(il2cpp_object_get_class(entries)), "Add", ["UnityEngine.EventSystems.EventTrigger.Entry"]);
+        var add = api.AddEntries.GetOrAdd(il2cpp_object_get_class(entries), static klass =>
+            NativeUi.Resolve(new Il2CppClass(klass), "Add", ["UnityEngine.EventSystems.EventTrigger.Entry"]));
         foreach (var (eventType, callback) in handlers)
         {
             nint entry = api.Entry.New();
@@ -241,6 +335,7 @@ public sealed unsafe class NativeUiSession : IDisposable
         internal Il2CppClass ActionClass { get; }
         private readonly Il2CppMethod _ctor;
         private readonly Il2CppMethod _invoke;
+        private readonly CallbackKind? _kind;
         private readonly DelegateFields _fields = DelegateFields.Instance;
 
         internal EventBinding(Il2CppClass eventClass)
@@ -255,6 +350,16 @@ public sealed unsafe class NativeUiSession : IDisposable
             _ctor = NativeUi.Resolve(ActionClass, ".ctor", ["System.Object", "System.IntPtr"]);
             _invoke = ActionClass.GetMethod("Invoke", ActionClass.Name == "UnityAction" ? 0 : 1)
                 ?? throw new MissingMethodException(ActionClass.Name, "Invoke");
+            _kind = _invoke.ParamCount == 0 ? CallbackKind.Empty :
+                NativeUi.ReadTypeName(il2cpp_method_get_param(_invoke.Ptr, 0)) switch
+                {
+                    "System.Boolean" => CallbackKind.Boolean,
+                    "System.Int32" => CallbackKind.Integer,
+                    "System.Single" => CallbackKind.Single,
+                    "System.String" => CallbackKind.String,
+                    "UnityEngine.EventSystems.BaseEventData" => CallbackKind.EventData,
+                    _ => null,
+                };
         }
 
         private static Il2CppMethod FindListenerMethod(Il2CppClass klass, string name)
@@ -269,17 +374,7 @@ public sealed unsafe class NativeUiSession : IDisposable
 
         internal void ValidateSignature(CallbackKind kind)
         {
-            if (kind == CallbackKind.Empty && _invoke.ParamCount == 0) return;
-            string expected = kind switch
-            {
-                CallbackKind.Boolean => "System.Boolean",
-                CallbackKind.Integer => "System.Int32",
-                CallbackKind.Single => "System.Single",
-                CallbackKind.String => "System.String",
-                CallbackKind.EventData => "UnityEngine.EventSystems.BaseEventData",
-                _ => "",
-            };
-            if (_invoke.ParamCount != 1 || NativeUi.ReadTypeName(il2cpp_method_get_param(_invoke.Ptr, 0)) != expected)
+            if (_kind != kind)
                 throw new InvalidOperationException($"Unsupported UnityAction signature ({kind}).");
         }
 
@@ -317,19 +412,22 @@ public sealed unsafe class NativeUiSession : IDisposable
         private const string Ui = "UnityEngine.UI";
         private const string Events = "UnityEngine.EventSystems";
         internal static readonly PointerBindings Instance = new();
-        internal readonly Il2CppClass Trigger = NativeUi.FindClass(Ui, Events, "EventTrigger");
         internal readonly Il2CppClass Entry = NativeUi.FindClass(Ui, Events, "EventTrigger/Entry");
+        internal readonly ConcurrentDictionary<nint, Il2CppMethod> AddEntries = new();
         internal readonly Il2CppMethod AddComponent, GetTriggers, InitializeEntry;
         internal readonly Il2CppField EventId, EntryCallback;
+        internal readonly UiRoot TriggerType;
 
         private PointerBindings()
         {
             var gameObject = NativeUi.FindClass("UnityEngine.CoreModule", "UnityEngine", "GameObject");
+            var trigger = NativeUi.FindClass(Ui, Events, "EventTrigger");
             AddComponent = NativeUi.Resolve(gameObject, "AddComponent", ["System.Type"]);
-            GetTriggers = NativeUi.Resolve(Trigger, "get_triggers", []);
+            GetTriggers = NativeUi.Resolve(trigger, "get_triggers", []);
             InitializeEntry = NativeUi.Resolve(Entry, ".ctor", []);
             EventId = NativeUi.Field(Entry, "eventID");
             EntryCallback = NativeUi.Field(Entry, "callback");
+            TriggerType = new UiRoot(trigger.GetTypeObject());
         }
     }
 

@@ -254,7 +254,7 @@ public sealed class Il2CppRuntimeRegressionTests
             LastObjectValue = value;
         }
 
-        public nint RuntimeInvoke(nint method, nint obj, nint[]? args, out nint exception)
+        public nint RuntimeInvoke(nint method, nint obj, ReadOnlySpan<nint> args, out nint exception)
         {
             exception = InvokeException;
             return InvokeResult;

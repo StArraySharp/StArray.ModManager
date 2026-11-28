@@ -14,7 +14,7 @@ internal interface IIl2CppRuntimeApi
     T GetFieldValue<T>(nint obj, nint field, bool isStatic) where T : unmanaged;
     void SetFieldValue<T>(nint obj, nint field, bool isStatic, T value) where T : unmanaged;
     void SetObjectFieldValue(nint obj, nint field, nint value);
-    nint RuntimeInvoke(nint method, nint obj, nint[]? args, out nint exception);
+    nint RuntimeInvoke(nint method, nint obj, ReadOnlySpan<nint> args, out nint exception);
     string FormatException(nint exception);
     string FormatStackTrace(nint exception);
 }
@@ -121,7 +121,7 @@ internal sealed unsafe class NativeIl2CppRuntimeApi : IIl2CppRuntimeApi
     public void SetObjectFieldValue(nint obj, nint field, nint value)
         => Il2CppFunctions.il2cpp_field_set_value_object(obj, field, value);
 
-    public nint RuntimeInvoke(nint method, nint obj, nint[]? args, out nint exception)
+    public nint RuntimeInvoke(nint method, nint obj, ReadOnlySpan<nint> args, out nint exception)
     {
         exception = 0;
         fixed (nint* p = args)

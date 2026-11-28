@@ -172,7 +172,9 @@ public unsafe class Il2CppMethod : IRuntimeMethod
 
     public nint FunctionPtr => *(nint*)Ptr;
 
-    public unsafe nint Invoke(nint obj, nint[]? args = null)
+    public nint Invoke(nint obj, nint[]? args = null) => Invoke(obj, args.AsSpan());
+
+    internal nint Invoke(nint obj, ReadOnlySpan<nint> args)
     {
         var result = Il2CppRuntimeApi.Current.RuntimeInvoke(Ptr, obj, args, out var exception);
         if (exception != 0)

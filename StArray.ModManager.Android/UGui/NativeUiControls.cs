@@ -28,20 +28,21 @@ public struct UiColor(float r, float g, float b, float a = 1)
     public static implicit operator UiColor(Vector4 value) => new(value.X, value.Y, value.Z, value.W);
 }
 
+[UiType("UnityEngine.CoreModule", "UnityEngine", "Component")]
 public abstract class UiComponent(nint pointer) : NativeUiObject(pointer)
 {
     private static readonly UiMethod GameObjectGetter = new(typeof(UiComponent), "get_gameObject", true);
     private static readonly UiMethod TransformGetter = new(typeof(UiComponent), "get_transform", true);
+    private static readonly UiMethod GetComponentMethod = new(typeof(UiComponent), "GetComponent", false, "System.Type");
 
     public UiGameObject GameObject => NativeUi.Wrap<UiGameObject>(GameObjectGetter.Invoke(this))!;
     public UiTransform Transform => NativeUi.Wrap<UiTransform>(TransformGetter.Invoke(this))!;
 
     public T? GetComponent<T>() where T : UiComponent
-    {
-        var method = new UiMethod(typeof(UiComponent), "GetComponent", true, "System.Type");
-        return NativeUi.Wrap<T>(method.Invoke(this, [UiArg.Type(typeof(T))]));
-    }
+        => NativeUi.Wrap<T>(GetComponentMethod.Invoke(this, UiArg.Type(typeof(T))));
 }
+
+internal sealed class UiEvent(nint pointer) : NativeUiObject(pointer);
 
 [UiType("UnityEngine.CoreModule", "UnityEngine", "GameObject")]
 public sealed class UiGameObject(nint pointer) : NativeUiObject(pointer)
@@ -127,7 +128,7 @@ public sealed class UiRectTransform(nint pointer) : UiTransform(pointer)
     public UiVector2 AnchoredPosition { get => NativeUi.Unbox<UiVector2>(AnchoredGet.Invoke(this)); set => AnchoredSet.Invoke(this, [UiArg.Value(value)]); }
 }
 
-[UiType("UnityEngine.CoreModule", "UnityEngine", "Canvas")]
+[UiType("UnityEngine.UIModule", "UnityEngine", "Canvas")]
 public sealed class UiCanvas(nint pointer) : UiComponent(pointer)
 {
     private static readonly UiMethod RenderModeSet = new(typeof(UiCanvas), "set_renderMode", true, "UnityEngine.RenderMode");
@@ -183,13 +184,13 @@ public sealed class UiText(nint pointer) : UiComponent(pointer)
     public UiFont? Font { set => FontSet.Invoke(this, [UiArg.Reference(value)]); }
 }
 
-[UiType("UnityEngine.CoreModule", "UnityEngine", "Font")]
+[UiType("UnityEngine.TextRenderingModule", "UnityEngine", "Font")]
 public sealed class UiFont(nint pointer) : NativeUiObject(pointer)
 {
     private static readonly UiMethod BuiltinMethod = new(typeof(UiResources), "GetBuiltinResource", false,
         "System.Type", "System.String");
 
-    public static UiFont LoadBuiltin(string name = "Arial.ttf")
+    public static UiFont LoadBuiltin(string name = "LegacyRuntime.ttf")
         => NativeUi.Wrap<UiFont>(BuiltinMethod.Invoke(null, [UiArg.Type(typeof(UiFont)), UiArg.String(name)]))
             ?? throw new InvalidOperationException($"Unity builtin font '{name}' was not found.");
 }
@@ -203,7 +204,7 @@ public sealed class UiButton(nint pointer) : UiComponent(pointer)
     private static readonly UiMethod ClickGet = new(typeof(UiButton), "get_onClick", true);
     public void OnClick(Action callback)
     {
-        var click = NativeUi.Wrap<NativeUiObject>(ClickGet.Invoke(this))!;
+        var click = new UiEvent(ClickGet.Invoke(this));
         NativeUiSession.Listen(this, click, callback);
     }
 }
@@ -213,10 +214,9 @@ public sealed class UiToggle(nint pointer) : UiComponent(pointer)
 {
     private static readonly UiMethod ValueGet = new(typeof(UiToggle), "get_isOn", true);
     private static readonly UiMethod ValueSet = new(typeof(UiToggle), "set_isOn", true, "System.Boolean");
-    private static readonly UiMethod ChangedGet = new(typeof(UiToggle), "get_onValueChanged", true);
     public bool IsOn { get => NativeUi.Unbox<bool>(ValueGet.Invoke(this)); set => ValueSet.Invoke(this, [UiArg.Value(value)]); }
     public void OnValueChanged(Action<bool> callback)
-        => NativeUiSession.Listen(this, NativeUi.Wrap<NativeUiObject>(ChangedGet.Invoke(this))!, callback);
+        => NativeUiSession.Listen(this, new UiEvent(NativeUiSession.ReadReferenceField(this, typeof(UiToggle), "onValueChanged")), callback);
 }
 
 [UiType("UnityEngine.UI", "UnityEngine.UI", "Slider")]
@@ -231,7 +231,7 @@ public sealed class UiSlider(nint pointer) : UiComponent(pointer)
     public float MinValue { set => MinSet.Invoke(this, [UiArg.Value(value)]); }
     public float MaxValue { set => MaxSet.Invoke(this, [UiArg.Value(value)]); }
     public void OnValueChanged(Action<float> callback)
-        => NativeUiSession.Listen(this, NativeUi.Wrap<NativeUiObject>(ChangedGet.Invoke(this))!, callback);
+        => NativeUiSession.Listen(this, new UiEvent(ChangedGet.Invoke(this)), callback);
 }
 
 [UiType("UnityEngine.UI", "UnityEngine.UI", "InputField")]
@@ -242,7 +242,7 @@ public sealed class UiInputField(nint pointer) : UiComponent(pointer)
     private static readonly UiMethod ChangedGet = new(typeof(UiInputField), "get_onValueChanged", true);
     public string Text { get => NativeUi.ReadString(TextGet.Invoke(this)) ?? ""; set => TextSet.Invoke(this, [UiArg.String(value)]); }
     public void OnValueChanged(Action<string> callback)
-        => NativeUiSession.Listen(this, NativeUi.Wrap<NativeUiObject>(ChangedGet.Invoke(this))!, callback);
+        => NativeUiSession.Listen(this, new UiEvent(ChangedGet.Invoke(this)), callback);
 }
 
 [UiType("UnityEngine.UI", "UnityEngine.UI", "Dropdown")]
@@ -253,7 +253,7 @@ public sealed class UiDropdown(nint pointer) : UiComponent(pointer)
     private static readonly UiMethod ChangedGet = new(typeof(UiDropdown), "get_onValueChanged", true);
     public int Value { get => NativeUi.Unbox<int>(ValueGet.Invoke(this)); set => ValueSet.Invoke(this, [UiArg.Value(value)]); }
     public void OnValueChanged(Action<int> callback)
-        => NativeUiSession.Listen(this, NativeUi.Wrap<NativeUiObject>(ChangedGet.Invoke(this))!, callback);
+        => NativeUiSession.Listen(this, new UiEvent(ChangedGet.Invoke(this)), callback);
 }
 
 [UiType("UnityEngine.UI", "UnityEngine.UI", "ScrollRect")]

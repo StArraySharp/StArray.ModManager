@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -46,6 +47,11 @@ internal sealed class UiRoot : SafeHandle
 public static unsafe class NativeUi
 {
     private static readonly ConditionalWeakTable<Type, Il2CppClass> Classes = new();
+    private static readonly ConditionalWeakTable<Type, UiRoot> TypeObjects = new();
+    private static readonly ConcurrentDictionary<(string Image, string Namespace, string Name), Il2CppClass> NativeClasses = new();
+    private static readonly ConcurrentDictionary<nint, MethodIndex> Methods = new();
+    private static readonly ConcurrentDictionary<nint, string> TypeNames = new();
+    private static readonly ConcurrentDictionary<(nint Class, string Name), Il2CppField> Fields = new();
 
     public static Il2CppClass Class(Type type) => Classes.GetValue(type, static t =>
     {
@@ -56,11 +62,13 @@ public static unsafe class NativeUi
 
     internal static Il2CppClass FindClass(string image, string namespaze, string name)
     {
-        var klass = Il2CppAssembly.Get(image)?.GetClass(namespaze, name);
-        return klass ?? throw new TypeLoadException($"Missing native type {image}:{namespaze}.{name}.");
+        return NativeClasses.GetOrAdd((image, namespaze, name), static key =>
+            Il2CppAssembly.Get(key.Image)?.GetClass(key.Namespace, key.Name)
+            ?? throw new TypeLoadException($"Missing native type {key.Image}:{key.Namespace}.{key.Name}."));
     }
 
-    public static nint TypeObject(Type type) => Class(type).GetTypeObject();
+    public static nint TypeObject(Type type) =>
+        TypeObjects.GetValue(type, static key => new UiRoot(Class(key).GetTypeObject())).Target;
 
     public static T? Wrap<T>(nint pointer) where T : NativeUiObject =>
         pointer == 0 ? null : Factory<T>.Create(pointer);
@@ -78,10 +86,19 @@ public static unsafe class NativeUi
 
     private static class Factory<T> where T : NativeUiObject
     {
-        private static readonly ConstructorInfo Constructor = typeof(T).GetConstructor([typeof(nint)])
-            ?? throw new MissingMethodException(typeof(T).FullName, ".ctor(nint)");
+        private static readonly ConstructorInvoker Constructor = ConstructorInvoker.Create(
+            typeof(T).GetConstructor([typeof(nint)])
+            ?? throw new MissingMethodException(typeof(T).FullName, ".ctor(nint)"));
 
-        internal static T Create(nint pointer) => (T)Constructor.Invoke([pointer]);
+        internal static T Create(nint pointer)
+        {
+            object argument = pointer;
+            try { return (T)Constructor.Invoke(argument); }
+            catch (Exception exception) when (!typeof(T).IsAbstract)
+            {
+                throw new TargetInvocationException(exception);
+            }
+        }
     }
 
     public static T Unbox<T>(nint boxed) where T : unmanaged
@@ -116,56 +133,77 @@ public static unsafe class NativeUi
 
     internal static Il2CppMethod Resolve(Il2CppClass klass, string name, IReadOnlyList<string> signature)
     {
-        // Enumerate declarations in order so a derived Unity property wins over a hidden base property.
-        string owner = $"{klass.Namespace}.{klass.Name}";
-        for (nint type = klass.Ptr; type != 0; type = il2cpp_class_get_parent(type))
+        for (nint type = klass.Ptr; type != 0;)
         {
-            Il2CppMethod? match = null;
-            nint iterator = 0;
-            while (il2cpp_class_get_methods(type, ref iterator) is var ptr && ptr != 0)
+            var index = Methods.GetOrAdd(type, static pointer => new MethodIndex(pointer));
+            type = index.Parent;
+            if (!index.Declarations.TryGetValue(name, out var declarations)) continue;
+
+            nint match = 0;
+            foreach (nint method in declarations)
             {
-                var candidate = new Il2CppMethod(ptr);
-                if (candidate.ParamCount != signature.Count || candidate.Name != name
-                    || il2cpp_method_is_generic(ptr)) continue;
+                if (il2cpp_method_get_param_count(method) != signature.Count || il2cpp_method_is_generic(method))
+                    continue;
                 bool matches = true;
                 for (uint i = 0; i < signature.Count && matches; i++)
-                    matches = ReadTypeName(il2cpp_method_get_param(ptr, i)) == signature[(int)i];
+                    matches = ReadTypeName(il2cpp_method_get_param(method, i)) == signature[(int)i];
                 if (!matches) continue;
-                if (match != null) throw new AmbiguousMatchException($"{owner}::{name}");
-                match = candidate;
+                if (match != 0) throw new AmbiguousMatchException($"{klass.Namespace}.{klass.Name}::{name}");
+                match = method;
             }
-            if (match != null) return match;
+            if (match != 0) return new Il2CppMethod(match);
         }
-        throw new MissingMethodException(owner, $"{name}({string.Join(", ", signature)})");
+        throw new MissingMethodException($"{klass.Namespace}.{klass.Name}", $"{name}({string.Join(", ", signature)})");
     }
 
-    internal static string ReadTypeName(nint type)
+    private sealed class MethodIndex
     {
-        nint text = il2cpp_type_get_name(type);
+        internal nint Parent { get; }
+        internal Dictionary<string, List<nint>> Declarations { get; } = new(StringComparer.Ordinal);
+
+        internal MethodIndex(nint type)
+        {
+            Parent = il2cpp_class_get_parent(type);
+            nint iterator = 0;
+            while (il2cpp_class_get_methods(type, ref iterator) is var method && method != 0)
+            {
+                string name = Marshal.PtrToStringAnsi(il2cpp_method_get_name(method)) ?? "";
+                if (!Declarations.TryGetValue(name, out var overloads))
+                    Declarations.Add(name, overloads = []);
+                overloads.Add(method);
+            }
+        }
+    }
+
+    internal static string ReadTypeName(nint type) => TypeNames.GetOrAdd(type, static pointer =>
+    {
+        nint text = il2cpp_type_get_name(pointer);
         try { return (Marshal.PtrToStringUTF8(text) ?? "").Replace('/', '.').Replace('+', '.'); }
         finally { if (text != 0) il2cpp_free(text); }
-    }
+    });
 
-    internal static Il2CppField Field(Il2CppClass klass, string name) => klass.GetField(name)
-        ?? throw new MissingFieldException(klass.Name, name);
+    internal static Il2CppField Field(Il2CppClass klass, string name) =>
+        Fields.GetOrAdd((klass.Ptr, name), static (key, owner) =>
+            owner.GetField(key.Name) ?? throw new MissingFieldException(owner.Name, key.Name), klass);
 }
 
 /// <summary>One argument in the IL2CPP runtime-invoke ABI.</summary>
 public unsafe struct UiArg
 {
     // Largest Unity value used by the panel is ColorBlock (88 bytes).
-    [InlineArray(96)]
+    internal const int ValueCapacity = 96;
+    [InlineArray(ValueCapacity)]
     private struct ValueBuffer { private byte _element; }
     private ValueBuffer _value;
-    private bool _inline;
+    private int _valueSize;
     private nint _pointer;
     private NativeUiObject? _object;
     private UiRoot? _temporary;
 
     public static UiArg Value<T>(T value) where T : unmanaged
     {
-        if (sizeof(T) > 96) throw new ArgumentOutOfRangeException(nameof(value));
-        UiArg arg = new() { _inline = true };
+        if (sizeof(T) > ValueCapacity) throw new ArgumentOutOfRangeException(nameof(value));
+        UiArg arg = new() { _valueSize = sizeof(T) };
         Unsafe.WriteUnaligned(ref arg._value[0], value);
         return arg;
     }
@@ -197,14 +235,14 @@ public unsafe struct UiArg
     }
 
     private static UiArg Temporary(nint ptr) => new() { _pointer = ptr, _temporary = new UiRoot(ptr) };
-    internal nint GetPointer(byte* value)
+    internal readonly nint GetPointer(byte* value)
     {
-        if (!_inline) return _pointer;
-        _value[..].CopyTo(new Span<byte>(value, 96));
+        if (_valueSize == 0) return _pointer;
+        _value[.._valueSize].CopyTo(new Span<byte>(value, _valueSize));
         return (nint)value;
     }
 
-    internal void Release()
+    internal readonly void Release()
     {
         _temporary?.Dispose();
         GC.KeepAlive(_object);
@@ -214,9 +252,14 @@ public unsafe struct UiArg
 /// <summary>A lazily resolved method with an exact Android Unity parameter signature.</summary>
 public sealed unsafe class UiMethod(Type owner, string name, bool virtualDispatch, params string[] signature)
 {
-    private Il2CppMethod? _method;
+    private const int StackArgumentLimit = 8;
+    private static readonly ConcurrentDictionary<(nint Class, nint Method), Il2CppMethod> VirtualMethods = new();
+    private MethodBinding? _binding;
 
     public nint Invoke(NativeUiObject? instance, params UiArg[] args)
+        => Invoke(instance, args.AsSpan());
+
+    internal nint Invoke(NativeUiObject? instance, params ReadOnlySpan<UiArg> args)
     {
         try { return InvokeRaw(instance?.Pointer ?? 0, args); }
         finally { GC.KeepAlive(instance); }
@@ -228,6 +271,9 @@ public sealed unsafe class UiMethod(Type owner, string name, bool virtualDispatc
     }
 
     public nint Create(params UiArg[] args)
+        => Create(args.AsSpan());
+
+    internal nint Create(params ReadOnlySpan<UiArg> args)
     {
         var klass = NativeUi.Class(owner);
         nint instance = klass.New();
@@ -236,26 +282,53 @@ public sealed unsafe class UiMethod(Type owner, string name, bool virtualDispatc
         return instance;
     }
 
-    private nint InvokeRaw(nint instance, UiArg[] args)
+    private MethodBinding Bind()
+    {
+        var method = NativeUi.Resolve(NativeUi.Class(owner), name, signature);
+        uint implementationFlags = 0;
+        bool useVirtual = virtualDispatch &&
+            (il2cpp_method_get_flags(method.Ptr, ref implementationFlags) & (uint)MethodAttributes.Virtual) != 0;
+        return new MethodBinding(method, useVirtual);
+    }
+
+    private sealed class MethodBinding(Il2CppMethod method, bool useVirtual)
+    {
+        internal Il2CppMethod Method { get; } = method;
+        internal bool UseVirtual { get; } = useVirtual;
+    }
+
+    private nint InvokeRaw(nint instance, ReadOnlySpan<UiArg> args)
     {
         try
         {
             NativeUiSession.RequireCurrent();
-            var method = _method ??= NativeUi.Resolve(NativeUi.Class(owner), name, signature);
-            if (virtualDispatch && instance != 0)
+            var binding = _binding ??= Bind();
+            var method = binding.Method;
+            if (binding.UseVirtual && instance != 0)
             {
-                nint slot = il2cpp_object_get_virtual_method(instance, method.Ptr);
-                if (slot == 0) throw new MissingMethodException(owner.FullName, name);
-                method = new Il2CppMethod(slot);
+                nint runtimeClass = il2cpp_object_get_class(instance);
+                method = VirtualMethods.GetOrAdd((runtimeClass, method.Ptr), static (key, target) =>
+                {
+                    nint slot = il2cpp_object_get_virtual_method(target, key.Method);
+                    if (slot == 0) throw new MissingMethodException($"No virtual implementation for IL2CPP method 0x{key.Method:X}.");
+                    return new Il2CppMethod(slot);
+                }, instance);
             }
-            byte* buffer = stackalloc byte[96 * args.Length];
-            var native = new nint[args.Length];
-            for (int i = 0; i < args.Length; i++) native[i] = args[i].GetPointer(buffer + 96 * i);
-            return method.Invoke(instance, native);
+            if (args.Length == 0) return method.Invoke(instance);
+
+            int bufferSize = checked(UiArg.ValueCapacity * args.Length);
+            Span<byte> buffer = args.Length <= StackArgumentLimit ? stackalloc byte[bufferSize] : new byte[bufferSize];
+            Span<nint> native = args.Length <= StackArgumentLimit ? stackalloc nint[args.Length] : new nint[args.Length];
+            fixed (byte* values = buffer)
+            {
+                for (int i = 0; i < args.Length; i++)
+                    native[i] = args[i].GetPointer(values + UiArg.ValueCapacity * i);
+                return method.Invoke(instance, native);
+            }
         }
         finally
         {
-            foreach (ref var arg in args.AsSpan()) arg.Release();
+            foreach (ref readonly var arg in args) arg.Release();
         }
     }
 }
