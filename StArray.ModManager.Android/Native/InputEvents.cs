@@ -213,11 +213,11 @@ public static class InputEvents
         Action<AndroidInputEventInfo> handlers,
         AndroidInputEventInfo input)
     {
-        foreach (Delegate handler in handlers.GetInvocationList())
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
         {
             try
             {
-                ((Action<AndroidInputEventInfo>)handler)(input);
+                handler(input);
             }
             catch (Exception exception)
             {
@@ -230,24 +230,11 @@ public static class InputEvents
         Action<TouchTimestampInfo> handlers,
         TouchTimestampInfo info)
     {
-        if (Volatile.Read(ref s_touchTimestampSubscriberCount) == 1)
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
         {
             try
             {
-                handlers(info);
-            }
-            catch (Exception exception)
-            {
-                LogOnce($"Touch timestamp subscriber threw: {exception}");
-            }
-            return;
-        }
-
-        foreach (Delegate handler in handlers.GetInvocationList())
-        {
-            try
-            {
-                ((Action<TouchTimestampInfo>)handler)(info);
+                handler(info);
             }
             catch (Exception exception)
             {
@@ -260,24 +247,11 @@ public static class InputEvents
         Action<TouchEventInfo> handlers,
         TouchEventInfo info)
     {
-        if (Volatile.Read(ref s_touchSubscriberCount) == 1)
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
         {
             try
             {
-                handlers(info);
-            }
-            catch (Exception exception)
-            {
-                LogOnce($"Touch event subscriber threw: {exception}");
-            }
-            return;
-        }
-
-        foreach (Delegate handler in handlers.GetInvocationList())
-        {
-            try
-            {
-                ((Action<TouchEventInfo>)handler)(info);
+                handler(info);
             }
             catch (Exception exception)
             {

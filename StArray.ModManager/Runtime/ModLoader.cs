@@ -12,7 +12,7 @@ public class ModLoader
     private bool _pendingUpdatesChecked;
 
     /// <summary>已发现的 Mod 列表（只读）</summary>
-    public IReadOnlyList<ModEntry> Mods => _mods.AsReadOnly();
+    public IReadOnlyList<ModEntry> Mods { get; }
     /// <summary>Mods 目录路径</summary>
     public string ModsDirectory
     {
@@ -25,9 +25,7 @@ public class ModLoader
 
     /// <summary>创建 ModLoader 并指定 Mods 目录</summary>
     public ModLoader(string modsDirectory)
-    {
-        _modsDirectory = modsDirectory;
-    }
+        : this(modsDirectory, null) { }
 
     /// <summary>
     /// 扫描 mods 目录，发现所有 Mod
@@ -54,7 +52,7 @@ public class ModLoader
             return;
         }
 
-        foreach (var dir in Directory.GetDirectories(_modsDirectory))
+        foreach (var dir in Directory.EnumerateDirectories(_modsDirectory))
         {
             var mod = DiscoverMod(dir);
             if (mod != null)
@@ -81,8 +79,9 @@ public class ModLoader
     /// 全量扫描既慢、又会因其中任何一个类型加载失败而整体抛出。
     /// 没有该标注时回退到扫描，并容忍部分类型加载失败。
     /// </summary>
-    private static Type? ResolvePluginType(Assembly assembly)
+    private static Type? ResolvePluginType(Assembly assembly, ModEntry? discovered, out bool cacheable)
     {
+        cacheable = false;
         try
         {
             if (assembly.GetCustomAttribute<ModEntryPointAttribute>()?.PluginType is { } declared &&
@@ -95,7 +94,24 @@ public class ModLoader
             Logger.Warn(nameof(ModLoader), $"ModEntryPoint attribute unusable: {ex.Message}");
         }
 
+        if (discovered?.DiscoveredPlugin is { } entry)
+        {
+            try
+            {
+                if (assembly.ManifestModule.ModuleVersionId == entry.ModuleId
+                    && assembly.GetType(entry.Name, throwOnError: false) is { } cached
+                    && IsPluginType(cached))
+                    return cached;
+            }
+            catch (Exception ex) when (ex is TypeLoadException or FileNotFoundException
+                or FileLoadException or BadImageFormatException)
+            {
+                Logger.Debug(nameof(ModLoader), $"Discovered plugin type unavailable: {ex.Message}");
+            }
+        }
+
         Type?[] types;
+        bool firstConcrete = true;
         try
         {
             types = assembly.GetTypes();
@@ -103,9 +119,21 @@ public class ModLoader
         catch (ReflectionTypeLoadException ex)
         {
             types = ex.Types;
+            firstConcrete = false;
         }
 
-        return types.FirstOrDefault(t => t != null && IsPluginType(t));
+        foreach (var type in types)
+        {
+            if (type == null || type.IsInterface || type.IsAbstract)
+                continue;
+            if (typeof(IModPlugin).IsAssignableFrom(type))
+            {
+                cacheable = firstConcrete && type.Module == assembly.ManifestModule;
+                return type;
+            }
+            firstConcrete = false;
+        }
+        return null;
     }
 
     private static bool IsPluginType(Type t) =>
@@ -121,11 +149,19 @@ public class ModLoader
 
         if (entryDll == null)
         {
-            var dlls = Directory.EnumerateFiles(folderPath)
-                .Where(f => Path.GetExtension(f).Equals(".dll", StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            entryDll = dlls.FirstOrDefault(f => Path.GetFileNameWithoutExtension(f) == dirName)
-                ?? dlls.FirstOrDefault(f => !Path.GetFileNameWithoutExtension(f).Equals("StArray.ModManager", StringComparison.OrdinalIgnoreCase));
+            foreach (string file in Directory.EnumerateFiles(folderPath))
+            {
+                if (!Path.GetExtension(file.AsSpan()).Equals(".dll", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var name = Path.GetFileNameWithoutExtension(file.AsSpan());
+                if (name.Equals(dirName, StringComparison.Ordinal))
+                {
+                    entryDll = file;
+                    break;
+                }
+                if (entryDll == null && !name.Equals("StArray.ModManager", StringComparison.OrdinalIgnoreCase))
+                    entryDll = file;
+            }
         }
 
         if (entryDll == null) return null;
@@ -140,7 +176,7 @@ public class ModLoader
                 // 探测只读元数据：流式加载即可（不锁文件；Location 无人消费）
                 var assembly = probe.LoadMetadataFromPath(entryDll);
 
-                var pluginType = ResolvePluginType(assembly);
+                var pluginType = ResolvePluginType(assembly, null, out bool cacheable);
                 if (pluginType == null)
                 {
                     // 静默跳过会让“共发现 0 个 Mod”难以定位，这里留下原因
@@ -162,6 +198,8 @@ public class ModLoader
                     Dependencies = plugin.Dependencies?.ToList() ?? new List<string>(),
                     FolderPath = folderPath,
                     EntryPoint = entryDll,
+                    DiscoveredPlugin = cacheable && pluginType.FullName is { } name
+                        ? (name, assembly.ManifestModule.ModuleVersionId) : null,
                 };
             }
             finally
@@ -219,7 +257,7 @@ public class ModLoader
                     _managerDir);
 
                 var assembly = alc.LoadFromFilePath(mod.EntryPoint);
-                var pluginType = ResolvePluginType(assembly);
+                var pluginType = ResolvePluginType(assembly, mod, out _);
                 if (pluginType != null)
                 {
                     var plugin = (IModPlugin)Activator.CreateInstance(pluginType)!;
@@ -297,6 +335,7 @@ public class ModLoader
     {
         _modsDirectory = modsDirectory;
         _managerDir = managerDir;
+        Mods = _mods.AsReadOnly();
     }
 
     /// <summary>

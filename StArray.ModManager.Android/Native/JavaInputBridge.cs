@@ -112,6 +112,7 @@ internal static unsafe class AndroidJavaInputBridge
 
     private static readonly ConcurrentQueue<AndroidInputEventInfo> ImGuiInputQueue = new();
     private static int s_queuedImGuiEventCount;
+    private static int s_captureState = -1;
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     internal struct NativeInputEventHeader
@@ -200,6 +201,7 @@ internal static unsafe class AndroidJavaInputBridge
         try
         {
             SetInputCallback(Marshal.GetFunctionPointerForDelegate(s_callback));
+            s_captureState = -1;
             return true;
         }
         catch (Exception exception) when (exception is DllNotFoundException
@@ -209,11 +211,16 @@ internal static unsafe class AndroidJavaInputBridge
         }
     }
 
-    internal static void SetCaptureState(bool captureMouse, bool captureKeyboard)
+    private static void SetCaptureState(bool captureMouse, bool captureKeyboard)
     {
+        int state = (captureMouse ? 1 : 0) | (captureKeyboard ? 2 : 0);
+        if (state == s_captureState)
+            return;
+
         try
         {
-            SetCaptureStateNative(0, captureMouse ? 1 : 0, captureKeyboard ? 1 : 0);
+            SetCaptureStateNative(0, state & 1, state >> 1);
+            s_captureState = state;
         }
         catch (Exception exception) when (exception is DllNotFoundException
             or EntryPointNotFoundException or BadImageFormatException)
@@ -308,7 +315,8 @@ internal static unsafe class AndroidJavaInputBridge
             nativePointers, storedCount, input->FullDataIncluded != 0);
 
         int storedHistoryCount = input->StoredHistorySampleCount;
-        var history = new AndroidInputHistorySampleInfo[storedHistoryCount];
+        AndroidInputHistorySampleInfo[] history = storedHistoryCount == 0
+            ? [] : new AndroidInputHistorySampleInfo[storedHistoryCount];
         NativeInputHistorySample* nativeHistory = (NativeInputHistorySample*)input->HistorySamples;
         for (int index = 0; index < storedHistoryCount; index++)
         {
@@ -380,9 +388,9 @@ internal static unsafe class AndroidJavaInputBridge
             ReadOnlyMemory<float> axes = ReadOnlyMemory<float>.Empty;
             if (axisStorage != null)
             {
-                for (int axis = 0; axis < AxisCount; axis++)
-                    axisStorage[index * AxisCount + axis] = pointer->AxisValues[axis];
-                axes = new ReadOnlyMemory<float>(axisStorage, index * AxisCount, AxisCount);
+                int offset = index * AxisCount;
+                new ReadOnlySpan<float>(pointer->AxisValues, AxisCount).CopyTo(axisStorage.AsSpan(offset, AxisCount));
+                axes = new ReadOnlyMemory<float>(axisStorage, offset, AxisCount);
             }
 
             pointers[index] = new AndroidInputPointerInfo(
@@ -419,11 +427,15 @@ internal static unsafe class AndroidJavaInputBridge
 
     private static AndroidInputEventInfo CreateImGuiSnapshot(AndroidInputEventInfo input)
     {
-        ReadOnlySpan<AndroidInputPointerInfo> source = input.Pointers.Span;
-        var pointers = new AndroidInputPointerInfo[source.Length];
-        for (int index = 0; index < source.Length; index++)
-            pointers[index] = source[index] with { AxisValues = ReadOnlyMemory<float>.Empty };
-
+        var pointers = input.Pointers;
+        if (input.FullDataIncluded && !pointers.IsEmpty)
+        {
+            var compact = new AndroidInputPointerInfo[pointers.Length];
+            ReadOnlySpan<AndroidInputPointerInfo> source = pointers.Span;
+            for (int index = 0; index < source.Length; index++)
+                compact[index] = source[index] with { AxisValues = ReadOnlyMemory<float>.Empty };
+            pointers = compact;
+        }
         return input with
         {
             Pointers = pointers,

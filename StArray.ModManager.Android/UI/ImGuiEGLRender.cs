@@ -36,6 +36,9 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
     /// <summary> 静态安装入口（供原生宿主调用） </summary>
     public static bool Install() => (s_instance = new ImGuiEGLRenderer()).InstallInstance();
 
+    internal static bool Install(AndroidImGuiStartup startup) =>
+        (s_instance = new ImGuiEGLRenderer { _startup = startup }).InstallInstance();
+
     /// <summary> 静态 OnRender 事件（Install 之前订阅会缓存） </summary>
     private static Action? s_pendingOnRender;
 
@@ -58,6 +61,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
     }
 
     private bool _initialized;
+    private AndroidImGuiStartup? _startup;
     private Action _onRender = () => { };
 
     event Action IImGuiRenderer.OnRender
@@ -74,18 +78,16 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
 
     private bool InstallInstance()
     {
-        HookHelper.Instance = new DobbyHook();
-        EglHooks.InstallHooks();
-        EglHooks.OnEglSwapBuffers = OnSwapBuffers;
-
-
-
+        _startup ??= new AndroidImGuiStartup();
         // 回放 Install 之前缓存的静态事件订阅
         if (s_pendingOnRender != null)
         {
             _onRender += s_pendingOnRender;
             s_pendingOnRender = null;
         }
+        HookHelper.Instance = new DobbyHook();
+        EglHooks.InstallHooks();
+        EglHooks.OnEglSwapBuffers = OnSwapBuffers;
         return true;
     }
 
@@ -111,7 +113,9 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
 
             if (!self._initialized)
             {
-                self.InitImGui(display, surface);
+                self.InitImGui();
+                if (!self._initialized)
+                    return EglHooks.HookEglSwapBuffersOriginal(display, surface);
             }
 
             // 使用官方 backend 的 NewFrame
@@ -132,7 +136,9 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
             StArray.ModManager.Android.Native.AndroidJavaInputBridge.UpdateCaptureState();
             // 渲染
             ImGui.Render();
-            ImGuiImplOpenGL3.RenderDrawData((IntPtr)ImGui.GetDrawData().NativePtr);
+            var drawData = ImGui.GetDrawData();
+            if (drawData.CmdListsCount != 0)
+                ImGuiImplOpenGL3.RenderDrawData((IntPtr)drawData.NativePtr);
 
             // 渲染后检查 surface 是否已被废弃
             var err = Egl.GetError();
@@ -149,21 +155,12 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         return EglHooks.HookEglSwapBuffersOriginal(display, surface);
     }
 
-    private void InitImGui(IntPtr display, IntPtr surface)
+    private void InitImGui()
     {
-        if (_initialized) return;
-        // 从 EGL surface 获取 ANativeWindow
-        if (!Egl.QuerySurface(display, surface, Egl.WIDTH, out var width) ||
-            !Egl.QuerySurface(display, surface, Egl.HEIGHT, out var height))
-        {
-            Logger.Error(nameof(ImGuiEGLRenderer), "Failed to query EGL surface for initialization");
+        if (!_startup!.TryInitializeContext())
             return;
-        }
-        // 创建 ImGui 上下文 + 加载嵌入式字体 msyh + FA 图标（共享接口）
-        ((IImGuiRenderer)this).InitImGui();
-        ImGuiInputHandler.IsInitialized = true;
+
         var io = ImGui.GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.FontGlobalScale = 3.0f;
 
         // 设置样式
@@ -179,6 +176,7 @@ public sealed unsafe class ImGuiEGLRenderer : IImGuiRenderer
         }
 
         ImGuiImplOpenGL3.Init();
+        ImGuiInputHandler.IsInitialized = true;
         ImGuiInputHandler.InstallInputHooks();
         _initialized = true;
     }

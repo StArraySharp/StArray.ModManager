@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using StArray.ModManager.Resources;
 using System.Numerics;
 using System.Reflection;
 using System.Text.Json;
@@ -17,7 +15,45 @@ namespace StArray.ModManager.Manager;
 public partial class ModManagerUI
 {
     private readonly ModLoader _modManager;
-    private readonly ConcurrentQueue<string> _logMessages = new();
+    private readonly Queue<LogMessage> _logMessages = new();
+    private readonly object _logLock = new();
+    private LogSnapshot? _logSnapshot;
+
+    private readonly record struct LogMessage(string Text, bool IsError);
+
+    private sealed class LogSnapshot(LogMessage[] messages)
+    {
+        private nint _measuredFont;
+        private float _measuredSize;
+        private float _width;
+
+        internal LogMessage[] Messages { get; } = messages;
+
+        internal unsafe float GetClippedWidth()
+        {
+            if (Messages.Length < 64)
+                return 0;
+
+            nint font = (nint)ImGui.GetFont().NativePtr;
+            float size = ImGui.GetFontSize();
+            if (_measuredFont == font && _measuredSize == size)
+                return _width;
+
+            float width = 0;
+            foreach (var message in Messages)
+            {
+                if (message.Text.Contains('\n'))
+                {
+                    width = 0;
+                    break;
+                }
+                width = Math.Max(width, ImGui.CalcTextSize(message.Text).X);
+            }
+            _measuredFont = font;
+            _measuredSize = size;
+            return _width = width;
+        }
+    }
     private ModEntry? _selectedMod;
     private ModManagerConfig _config = new();
     private readonly string _configDir;
@@ -156,8 +192,59 @@ public partial class ModManagerUI
             Logger.Level.Debug => "[DEBUG]",
             _                  => "[INFO]"
         };
-        _logMessages.Enqueue($"[{DateTime.Now:HH:mm:ss}] {prefix}[{tag}] {msg}");
-        if (_logMessages.Count > 500 && _logMessages.TryDequeue(out _)) { }
+        string text = $"[{DateTime.Now:HH:mm:ss}] {prefix}[{tag}] {msg}";
+        var message = new LogMessage(text, text.Contains("[ERROR]", StringComparison.Ordinal));
+        lock (_logLock)
+        {
+            if (_logMessages.Count == 500) _logMessages.Dequeue();
+            _logMessages.Enqueue(message);
+            _logSnapshot = null;
+        }
+    }
+
+    private LogSnapshot GetLogSnapshot()
+    {
+        lock (_logLock) return _logSnapshot ??= new LogSnapshot(_logMessages.ToArray());
+    }
+
+    private void ClearLog()
+    {
+        lock (_logLock)
+        {
+            _logMessages.Clear();
+            _logSnapshot = null;
+        }
+    }
+
+    private static unsafe void RenderLogMessages(LogMessage[] messages, bool clip)
+    {
+        if (!clip)
+        {
+            foreach (var message in messages) RenderLogMessage(message);
+            return;
+        }
+
+        ImGuiListClipper nativeClipper = default;
+        var clipper = new ImGuiListClipperPtr(&nativeClipper);
+        clipper.Begin(messages.Length, ImGui.GetTextLineHeightWithSpacing());
+        try
+        {
+            while (clipper.Step())
+                for (int index = clipper.DisplayStart; index < clipper.DisplayEnd; index++)
+                    RenderLogMessage(messages[index]);
+        }
+        finally
+        {
+            clipper.End();
+        }
+    }
+
+    private static void RenderLogMessage(LogMessage message)
+    {
+        var color = message.IsError ? new Vector4(1f, 0.3f, 0.3f, 1f) : new Vector4(0.7f, 0.7f, 0.7f, 1f);
+        ImGui.PushStyleColor(ImGuiCol.Text, color);
+        try { ImGui.TextUnformatted(message.Text); }
+        finally { ImGui.PopStyleColor(); }
     }
 
     /// <summary>
@@ -230,7 +317,11 @@ public partial class ModManagerUI
     private void RenderMainWindow()
     {
         ImGui.SetNextWindowSize(new Vector2(680, 650), ImGuiCond.FirstUseEver);
-        ImGui.Begin(L10n.Get("MainWindow_Title"));
+        if (!ImGui.Begin(L10n.Get("MainWindow_Title")))
+        {
+            ImGui.End();
+            return;
+        }
             ImGui.PushTextWrapPos();
             if (ImGui.BeginTabBar("MainTabs"))
             {
@@ -307,31 +398,26 @@ public partial class ModManagerUI
                 {
                     if (ImGui.BeginTabBar("ConsoleTabs"))
                     {
-                            if (ImGui.BeginTabItem(L10n.Get("Tab_Log")))
+                        if (ImGui.BeginTabItem(L10n.Get("Tab_Log")))
                         {
-                            var logSnapshot = _logMessages.ToArray();
-                            if (ImGui.Button(FontAwesome7.Trash + " " + L10n.Get("Btn_Clear"))) { while (_logMessages.TryDequeue(out _)) { } }
+                            if (ImGui.Button(FontAwesome7.Trash + " " + L10n.Get("Btn_Clear"))) ClearLog();
+                            var logSnapshot = GetLogSnapshot();
                             ImGui.SameLine();
-                            ImGui.Text(L10n.Get("Status_LogCount", logSnapshot.Length));
+                            ImGui.Text(L10n.Get("Status_LogCount", logSnapshot.Messages.Length));
                             ImGui.Separator();
+
+                            float contentWidth = logSnapshot.GetClippedWidth();
+                            if (contentWidth > 0)
+                                ImGui.SetNextWindowContentSize(new Vector2(contentWidth, 0));
 
                             if (ImGui.BeginChild("LogScroll", Vector2.Zero, ImGuiChildFlags.None,
                                 ImGuiWindowFlags.HorizontalScrollbar | ImGuiWindowFlags.AlwaysVerticalScrollbar))
                             {
                                 try
                                 {
-                                    var atBottom = logSnapshot.Length == 0 ||
+                                    var atBottom = logSnapshot.Messages.Length == 0 ||
                                         ImGui.GetScrollY() >= ImGui.GetScrollMaxY() - 4f;
-                                    var normalColor = new Vector4(0.7f, 0.7f, 0.7f, 1f);
-                                    var errorColor = new Vector4(1f, 0.3f, 0.3f, 1f);
-                                    foreach (var msg in logSnapshot)
-                                    {
-                                        var isError = msg.Contains("[ERROR]");
-                                        if (isError) ImGui.PushStyleColor(ImGuiCol.Text, errorColor);
-                                        else ImGui.PushStyleColor(ImGuiCol.Text, normalColor);
-                                        ImGui.TextUnformatted(msg);
-                                        ImGui.PopStyleColor();
-                                    }
+                                    RenderLogMessages(logSnapshot.Messages, clip: contentWidth > 0);
                                     if (atBottom)
                                         ImGui.SetScrollHereY(1f);
                                 }

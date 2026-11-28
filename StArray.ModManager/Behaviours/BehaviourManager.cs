@@ -16,6 +16,7 @@ public static class BehaviourManager
     private static readonly List<GameBehaviour> _pendingAdd = new();
     private static readonly List<GameBehaviour> _pendingRemove = new();
     private static readonly object _lock = new();
+    private static GameBehaviour[] _snapshot = [];
 
     /// <summary>当前活跃的行为列表（只读快照）</summary>
     public static IReadOnlyList<GameBehaviour> Behaviours
@@ -116,11 +117,6 @@ public static class BehaviourManager
         catch (Exception ex) { LogFault(b, nameof(GameBehaviour.OnDisable), ex); }
     }
 
-    private static GameBehaviour[] Snapshot()
-    {
-        lock (_lock) return _behaviours.ToArray();
-    }
-
     // ── 内部驱动（由 ModManagerUI 每帧调用） ──
 
     /// <summary>处理增删队列，派发 OnAwake/OnEnable 与 OnDisable/OnStop，在 Update 之前调用。</summary>
@@ -142,6 +138,7 @@ public static class BehaviourManager
             foreach (var b in toRemove)
                 _behaviours.Remove(b);
             _behaviours.AddRange(toAdd);
+            Volatile.Write(ref _snapshot, _behaviours.ToArray());
         }
 
         foreach (var b in toRemove)
@@ -169,7 +166,7 @@ public static class BehaviourManager
     /// <summary>按 Unity 的阶段顺序派发 OnStart → OnUpdate → OnLateUpdate。</summary>
     internal static void Update(float delta)
     {
-        var snapshot = Snapshot();
+        var snapshot = Volatile.Read(ref _snapshot);
 
         // Unity 会先跑完所有 Start，再进入 Update
         foreach (var b in snapshot)
@@ -198,7 +195,7 @@ public static class BehaviourManager
     /// <summary>对所有行为调用 OnGUI（ImGui 窗口渲染之后）。</summary>
     internal static void GUI(ImDrawListPtr drawList)
     {
-        foreach (var b in Snapshot())
+        foreach (var b in Volatile.Read(ref _snapshot))
         {
             if (b.IsDestroyed || !b.EnabledRaw || !b.Started) continue;
             try { b.OnGUI(drawList); }

@@ -71,13 +71,14 @@ public static class Managed
         };
         
         _ = RuntimeManager.Detect();
+        var imguiStartup = new AndroidImGuiStartup();
         var loader = new ModLoader(modsPath, AssemblyPath is { } ap ? Path.GetDirectoryName(ap) : null);
         var picker = new AndroidModFilePicker(modsPath);
         var ui = new ModManagerUI(loader, Path.GetDirectoryName(AssemblyPath)!, picker.PickAsync);
         HookHelper.Instance = new DobbyHook();
-        ImGuiEGLRender.OnRender += ui.Render;
-        ImGuiEGLRender.OnRender += picker.Render;
-        ImGuiEGLRender.Install();
+        ImGuiEGLRenderer.OnRender += ui.Render;
+        ImGuiEGLRenderer.OnRender += picker.Render;
+        ImGuiEGLRenderer.Install(imguiStartup);
 
         Logger.Info($"{nameof(Managed)}-Benchmark", $"=== Startup total: {Benchmark.End():F3}s ===");
         return 0;

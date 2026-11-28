@@ -32,6 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="StArray.ModManager.Android" />
     <InternalsVisibleTo Include="StArray.ModManager.Tests" />
   </ItemGroup>
 
